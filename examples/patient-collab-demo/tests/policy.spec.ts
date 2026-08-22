@@ -31,7 +31,8 @@ test("explicit policy defers projection until Save", async ({ browser }) => {
   await expect(projectionState(pageA)).toHaveText(t("policy.pending"));
   await expect(projectionPanel(pageA).getByRole("cell", { name: given })).toHaveCount(0);
 
-  await pageA.getByRole("button", { name: t("policy.save") }).click();
+  // `exact` — the room-status button's accessible name contains "Unsaved".
+  await pageA.getByRole("button", { name: t("policy.save"), exact: true }).click();
   await expect(projectionPanel(pageA).getByRole("cell", { name: given })).toBeVisible();
   await expect(projectionState(pageA)).toHaveText(t("policy.saved"));
 });

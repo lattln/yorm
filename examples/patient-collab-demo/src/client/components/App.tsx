@@ -1,5 +1,5 @@
 /**
- * UI shell: header with presence, the dense/eSheet view toggle, the
+ * UI shell: header with presence, the custom/eSheet view toggle, the
  * role/mode/autosave-policy controls and the room-status dot; below it two
  * faux desktop windows — the "Sample Application" (suggestions bar + Patient
  * editor) and the "Sample Server" debug terminal (live SQLite projection).
@@ -95,7 +95,7 @@ export function App(): React.JSX.Element {
       <main className={serverWindow ? "app-main app-main--solo" : "app-main"}>
         <WindowFrame title={t("app.sample")} label={t("app.sample")}>
           <ReviewPanel />
-          {view === "dense" ? <PatientEditor /> : <PatientForm />}
+          {view === "custom" ? <PatientEditor /> : <PatientForm />}
         </WindowFrame>
         {serverWindow ? (
           <p className="server-popped-note">

@@ -1,6 +1,6 @@
 /**
  * Header view toggle: which Patient editor the left pane renders — the
- * demo's dense custom editor (default) or the eSheet-rendered form. Both
+ * demo's custom editor (default) or the eSheet-rendered form. Both
  * views share the same store, proposals, and top bar; the initial view can
  * also come from the URL (`?view=esheet`).
  */
@@ -22,7 +22,7 @@ export function ViewToggle(): React.JSX.Element {
       </span>
       <Tabs value={view} onValueChange={(value) => setView(value as ViewKind)} variant="pills">
         <TabsList aria-label={t("view.label")}>
-          <TabsTrigger value="dense">{t("view.dense")}</TabsTrigger>
+          <TabsTrigger value="custom">{t("view.custom")}</TabsTrigger>
           <TabsTrigger value="esheet">{t("view.esheet")}</TabsTrigger>
         </TabsList>
       </Tabs>

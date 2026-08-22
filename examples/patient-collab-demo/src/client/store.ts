@@ -54,7 +54,7 @@ import { parseDemoRole } from "../rolePolicies";
 import type { DemoRole } from "../rolePolicies";
 
 /** Which Patient editor the left pane renders. */
-export type ViewKind = "dense" | "esheet";
+export type ViewKind = "custom" | "esheet";
 
 export interface Peer {
   clientId: number;
@@ -137,7 +137,7 @@ export const useCollabStore = create<CollabState>((set, get) => ({
   sqlCommits: [],
   mode: "editor",
   role: "physician",
-  view: "dense",
+  view: "custom",
   selfName: "",
   selfColor: PRESENCE_COLORS[0]!,
   events: [],
@@ -482,7 +482,7 @@ export function startCollab(): void {
 
   // The initial mode can come from the URL (`/?mode=proposer`), so a second
   // window can be opened straight into proposer mode; the initial view from
-  // `?view=esheet` (the dense editor is the default). The policy-lens role
+  // `?view=esheet` (the custom editor is the default). The policy-lens role
   // comes from `?role=` and is fixed for the page's lifetime.
   const params = new URLSearchParams(location.search);
   // `?pane=server` is the popped-out server terminal: a pure observer that
@@ -493,7 +493,7 @@ export function startCollab(): void {
   useCollabStore.setState({
     mode: initialMode,
     role: parseDemoRole(params.get("role")),
-    view: params.get("view") === "esheet" ? "esheet" : "dense",
+    view: params.get("view") === "esheet" ? "esheet" : "custom",
     selfName: t("presence.userName", { n: doc.clientID % 1000 }),
     selfColor: PRESENCE_COLORS[doc.clientID % PRESENCE_COLORS.length]!,
   });

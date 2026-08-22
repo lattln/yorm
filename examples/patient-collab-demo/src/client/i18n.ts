@@ -64,7 +64,7 @@ const en = {
   "form.phone": "Phone",
   "form.email": "Email",
   "view.label": "Editor",
-  "view.dense": "Dense",
+  "view.custom": "Custom",
   "view.esheet": "eSheet",
   "editor.section.identity": "Identity",
   "editor.section.identifiers": "Identifiers",

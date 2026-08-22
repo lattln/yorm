@@ -1,7 +1,28 @@
 {
   "name": "@yorm/yjs",
   "version": "0.1.0",
+  "description": "Canonical Yjs document runtime for YORM: createYorm, JSON codec, projection scheduler policies, proposals, replay, and role policy lenses.",
+  "keywords": [
+    "yorm",
+    "yjs",
+    "crdt",
+    "collaborative",
+    "projection"
+  ],
+  "license": "MIT",
+  "author": "Medical Informatics Engineering, Inc.",
+  "homepage": "https://github.com/mieweb/yorm/tree/main/packages/yjs#readme",
+  "bugs": "https://github.com/mieweb/yorm/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mieweb/yorm.git",
+    "directory": "packages/yjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -13,6 +34,10 @@
   "files": [
     "dist"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
     "build": "tsc -b",
     "test": "vitest run --passWithNoTests --root ../.. packages/yjs"

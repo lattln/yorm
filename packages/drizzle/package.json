@@ -1,7 +1,28 @@
 {
   "name": "@yorm/drizzle",
   "version": "0.1.0",
+  "description": "Drizzle-backed DocumentStore and ProjectionStore for YORM (SQLite), plus the adapter conformance suite every backend must pass.",
+  "keywords": [
+    "yorm",
+    "drizzle",
+    "sqlite",
+    "projection",
+    "adapter"
+  ],
+  "license": "MIT",
+  "author": "Medical Informatics Engineering, Inc.",
+  "homepage": "https://github.com/mieweb/yorm/tree/main/packages/drizzle#readme",
+  "bugs": "https://github.com/mieweb/yorm/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mieweb/yorm.git",
+    "directory": "packages/drizzle"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -13,6 +34,10 @@
   "files": [
     "dist"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
     "build": "tsc -b",
     "test": "vitest run --passWithNoTests --root ../.. packages/drizzle"

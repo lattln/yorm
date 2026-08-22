@@ -1,7 +1,28 @@
 {
   "name": "@yorm/fhir",
   "version": "0.1.0",
+  "description": "FHIR building blocks for YORM: a resource-aware JSON codec, stable element identity, and extension preservation helpers.",
+  "keywords": [
+    "yorm",
+    "fhir",
+    "hl7",
+    "codec",
+    "healthcare"
+  ],
+  "license": "MIT",
+  "author": "Medical Informatics Engineering, Inc.",
+  "homepage": "https://github.com/mieweb/yorm/tree/main/packages/fhir#readme",
+  "bugs": "https://github.com/mieweb/yorm/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mieweb/yorm.git",
+    "directory": "packages/fhir"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -13,6 +34,10 @@
   "files": [
     "dist"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
     "build": "tsc -b",
     "test": "vitest run --passWithNoTests --root ../.. packages/fhir"

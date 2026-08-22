@@ -16,7 +16,7 @@ import type { Patient } from "@yorm/fhir";
 import { t } from "../i18n";
 import type { StringKey } from "../i18n";
 import { clearResolvedProposals } from "../api";
-import { denseLabelForPath } from "../patientEditorFields";
+import { customLabelForPath } from "../patientEditorFields";
 import { formatFieldValue } from "../patientFields";
 import { useCollabStore } from "../store";
 import { useProposalActions } from "../useProposalActions";
@@ -25,7 +25,7 @@ import "./review-panel.scss";
 
 /** The field label for a proposal's path, falling back to the raw path. */
 function fieldLabelFor(patient: Patient | null, proposal: ChangeIntent): string {
-  return (patient && denseLabelForPath(patient, proposal.path)) ?? JSON.stringify(proposal.path);
+  return (patient && customLabelForPath(patient, proposal.path)) ?? JSON.stringify(proposal.path);
 }
 
 export function ReviewPanel(): React.JSX.Element | null {

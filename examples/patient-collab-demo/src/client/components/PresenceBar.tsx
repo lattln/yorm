@@ -6,7 +6,7 @@
 import { Avatar } from "@mieweb/ui";
 
 import { t } from "../i18n";
-import { denseFieldLabel } from "../patientEditorFields";
+import { customFieldLabel } from "../patientEditorFields";
 import { getFieldSpec } from "../patientFields";
 import { useCollabStore } from "../store";
 import type { Peer } from "../store";
@@ -19,7 +19,7 @@ function peerLabel(peer: Peer): string {
     const patient = useCollabStore.getState().patient;
     const field =
       (spec ? t(spec.labelKey) : null) ??
-      (patient ? denseFieldLabel(patient, peer.focusedField) : null) ??
+      (patient ? customFieldLabel(patient, peer.focusedField) : null) ??
       peer.focusedField;
     return t("presence.editingField", { name, field });
   }

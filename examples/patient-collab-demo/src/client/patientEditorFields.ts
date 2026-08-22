@@ -1,6 +1,6 @@
 /**
- * Dense-editor field specs (generated per Patient snapshot) — the
- * generalization of `patientFields.ts` for the custom dense editor: every
+ * Custom-editor field specs (generated per Patient snapshot) — the
+ * generalization of `patientFields.ts` for the custom editor: every
  * element of the Patient object gets a spec with a unique i18n'd label, a
  * `read` from the materialized JSON, a `write` into the Y.Doc root, and the
  * proposal path / value conversion the proposer mode needs. Array-backed
@@ -24,30 +24,30 @@ import {
 } from "./patientFields";
 import type { FieldWriteSpec } from "./patientFields";
 
-/** How the dense editor renders a field. */
-export type DenseControl = "text" | "date" | "checkbox" | "select";
+/** How the custom editor renders a field. */
+export type CustomControl = "text" | "date" | "checkbox" | "select";
 
-export interface DenseOption {
+export interface CustomOption {
   value: string;
   label: string;
 }
 
-export interface DenseFieldSpec extends FieldWriteSpec {
+export interface CustomFieldSpec extends FieldWriteSpec {
   /** Unique, fully i18n'd accessible label (entries > 1 get an index suffix). */
   label: string;
-  control: DenseControl;
+  control: CustomControl;
   /** Select options (`control === "select"`), starting with the unset option. */
-  options?: readonly DenseOption[];
+  options?: readonly CustomOption[];
   /** Reads the field's current value ("true"/"false" for checkboxes). */
   read(patient: Patient): string;
 }
 
-export interface DenseSection {
+export interface CustomSection {
   id: string;
   label: string;
   /** Top-level Patient keys the section's fields write — role gating. */
   topKeys: readonly string[];
-  fields: DenseFieldSpec[];
+  fields: CustomFieldSpec[];
 }
 
 // Extension URLs mirroring the POC mapping's vocabulary (mapping.ts exports
@@ -62,7 +62,7 @@ const ADDRESS_USES = ["home", "work", "temp", "old", "billing"] as const;
 const GENDERS = ["male", "female", "other", "unknown"] as const;
 
 /** Builds select options from FHIR codes, prefixed with the unset option. */
-function codeOptions(codes: readonly string[]): DenseOption[] {
+function codeOptions(codes: readonly string[]): CustomOption[] {
   return [
     { value: "", label: t("opt.unset") },
     ...codes.map((code) => ({ value: code, label: t(`opt.${code}` as StringKey) })),
@@ -137,10 +137,10 @@ function entryStringField(
   index: number,
   part: string,
   exists: boolean,
-  control: DenseControl = "text",
-  options?: readonly DenseOption[],
-): DenseFieldSpec {
-  const spec: DenseFieldSpec = {
+  control: CustomControl = "text",
+  options?: readonly CustomOption[],
+): CustomFieldSpec {
+  const spec: CustomFieldSpec = {
     id,
     label,
     control,
@@ -178,17 +178,17 @@ const SECTION_KEYS: Record<keyof typeof SECTION_LABELS, readonly string[]> = {
   extensions: ["extension"],
 };
 
-function section(id: keyof typeof SECTION_LABELS, fields: DenseFieldSpec[]): DenseSection {
+function section(id: keyof typeof SECTION_LABELS, fields: CustomFieldSpec[]): CustomSection {
   return { id, label: t(SECTION_LABELS[id]), topKeys: SECTION_KEYS[id], fields };
 }
 
 /**
- * All dense sections for the given Patient snapshot. The first name entry's
+ * All custom sections for the given Patient snapshot. The first name entry's
  * given/family and the first phone/email telecom values reuse the eSheet
  * field ids and labels (`given`, `family`, `phone`, `email`, `birthDate`),
  * so awareness presence and the Playwright locators are view-independent.
  */
-export function buildDenseSections(patient: Patient): DenseSection[] {
+export function buildCustomSections(patient: Patient): CustomSection[] {
   return [
     section("identity", [
       {
@@ -252,9 +252,9 @@ export function buildDenseSections(patient: Patient): DenseSection[] {
 }
 
 /** One system/value pair per identifier entry; a blank first entry when none. */
-function identifierFields(patient: Patient): DenseFieldSpec[] {
+function identifierFields(patient: Patient): CustomFieldSpec[] {
   const count = Math.max(patient.identifier?.length ?? 0, 1);
-  const fields: DenseFieldSpec[] = [];
+  const fields: CustomFieldSpec[] = [];
   for (let i = 0; i < count; i += 1) {
     const exists = patient.identifier?.[i] !== undefined;
     fields.push(
@@ -280,9 +280,9 @@ function identifierFields(patient: Patient): DenseFieldSpec[] {
 }
 
 /** given / family / use per name entry (the official entry reuses eSheet ids). */
-function nameFields(patient: Patient): DenseFieldSpec[] {
+function nameFields(patient: Patient): CustomFieldSpec[] {
   const names = patient.name ?? [];
-  const fields: DenseFieldSpec[] = [];
+  const fields: CustomFieldSpec[] = [];
   for (let i = 0; i < Math.max(names.length, 1); i += 1) {
     const n = i + 1;
     const exists = names[i] !== undefined;
@@ -323,10 +323,10 @@ function nameFields(patient: Patient): DenseFieldSpec[] {
 }
 
 /** system / use / value per telecom entry, labeled by the entry's system. */
-function telecomFields(patient: Patient): DenseFieldSpec[] {
+function telecomFields(patient: Patient): CustomFieldSpec[] {
   const telecom = patient.telecom ?? [];
   const seen = new Map<string, number>();
-  const fields: DenseFieldSpec[] = [];
+  const fields: CustomFieldSpec[] = [];
   for (let i = 0; i < telecom.length; i += 1) {
     const system = telecom[i]?.system;
     const occurrence = (seen.get(system ?? "") ?? 0) + 1;
@@ -369,9 +369,9 @@ function telecomFields(patient: Patient): DenseFieldSpec[] {
 }
 
 /** line / city / state / postalCode / country / use per address entry. */
-function addressFields(patient: Patient): DenseFieldSpec[] {
+function addressFields(patient: Patient): CustomFieldSpec[] {
   const addresses = patient.address ?? [];
-  const fields: DenseFieldSpec[] = [];
+  const fields: CustomFieldSpec[] = [];
   for (let i = 0; i < addresses.length; i += 1) {
     const n = i + 1;
     fields.push(
@@ -379,7 +379,7 @@ function addressFields(patient: Patient): DenseFieldSpec[] {
         id: `address.${i}.line`,
         label: nth(t("editor.addressLines"), n),
         control: "text",
-        // `line` is a string array; the dense input joins/splits on ";".
+        // `line` is a string array; the custom input joins/splits on ";".
         read: (p) => p.address?.[i]?.line?.join("; ") ?? "",
         write: (root, value) => {
           const entry = ensureMapAt(root, "address", i);
@@ -450,7 +450,7 @@ function addressFields(patient: Patient): DenseFieldSpec[] {
 }
 
 /** A `valueString` extension field (yorm organization / note). */
-function extensionField(id: string, label: string, url: string, patient: Patient): DenseFieldSpec {
+function extensionField(id: string, label: string, url: string, patient: Patient): CustomFieldSpec {
   const index = extensionIndex(patient, url);
   return {
     id,
@@ -470,12 +470,12 @@ function extensionField(id: string, label: string, url: string, patient: Patient
 // Lookups shared with the review panel / presence bar
 // ---------------------------------------------------------------------------
 
-/** The dense label for a proposal path, or null when no field addresses it. */
-export function denseLabelForPath(
+/** The custom-editor label for a proposal path, or null when no field addresses it. */
+export function customLabelForPath(
   patient: Patient,
   path: readonly (string | number)[],
 ): string | null {
-  for (const sect of buildDenseSections(patient)) {
+  for (const sect of buildCustomSections(patient)) {
     for (const field of sect.fields) {
       const fieldPath = field.proposalPath(patient);
       if (fieldPath && samePath(fieldPath, path)) {
@@ -486,9 +486,9 @@ export function denseLabelForPath(
   return null;
 }
 
-/** The dense label for an awareness `focusedField` id, if any. */
-export function denseFieldLabel(patient: Patient, fieldId: string): string | null {
-  for (const sect of buildDenseSections(patient)) {
+/** The custom-editor label for an awareness `focusedField` id, if any. */
+export function customFieldLabel(patient: Patient, fieldId: string): string | null {
+  for (const sect of buildCustomSections(patient)) {
     const field = sect.fields.find((candidate) => candidate.id === fieldId);
     if (field) {
       return field.label;
@@ -501,7 +501,7 @@ export function denseFieldLabel(patient: Patient, fieldId: string): string | nul
 // Unmapped extras ("keep the object")
 // ---------------------------------------------------------------------------
 
-/** Top-level Patient keys the dense editor renders as inputs. */
+/** Top-level Patient keys the custom editor renders as inputs. */
 const EDITED_KEYS = new Set([
   "resourceType",
   "id",
@@ -524,7 +524,7 @@ export interface UnmappedExtra {
 }
 
 /**
- * Everything on the Patient the dense editor has no input for: leftover
+ * Everything on the Patient the custom editor has no input for: leftover
  * top-level keys plus extension entries other than organization/note. These
  * live only in the canonical document — no SQL column, no form field.
  */

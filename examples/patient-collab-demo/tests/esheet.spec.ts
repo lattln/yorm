@@ -70,7 +70,7 @@ test("presence: a peer's focused field shows a presence dot in the eSheet view",
   const dot = (field: string) =>
     editor.locator(`.patient-form [data-field-id="${field}"] .collab-presence [title="${name}"]`);
 
-  // The proposer (dense view) focuses the email field — shared field ids
+  // The proposer (custom view) focuses the email field — shared field ids
   // make awareness view-independent.
   await fieldInput(proposer, t("form.email")).click();
   await expect(dot("email")).toBeVisible();
@@ -85,7 +85,7 @@ test("YAML config: label edit re-renders bound; invalid YAML shows an error", as
   browser,
 }) => {
   const editor = await openEsheetEditor(browser);
-  const other = await openEditor(browser); // dense view
+  const other = await openEditor(browser); // custom view
 
   await selectPolicy(editor, t("policy.every-change"));
 

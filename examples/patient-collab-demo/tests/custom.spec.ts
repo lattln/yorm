@@ -1,5 +1,5 @@
 /**
- * The dense custom Patient editor end to end:
+ * The custom Patient editor end to end:
  *
  * - an unmapped field (gender) converges over Yjs but never reaches the SQL
  *   rows ("keep the object" — no contact column exists for it);
@@ -8,7 +8,7 @@
  * - "Accept all" mass-resolves every open suggestion and the top bar keeps
  *   them listed as resolved;
  * - the header view toggle swaps to the eSheet form over the same document
- *   (same values; an eSheet edit converges back into a dense-view browser).
+ *   (same values; an eSheet edit converges back into a custom-view browser).
  *
  * All edited values are run-unique (`runId`): the e2e server may be reused
  * with persisted state, so constant values would be no-op fills.
@@ -61,14 +61,14 @@ test("inline accept next to the field applies the suggestion", async ({ browser 
 
   // The adornment renders next to the input, linked via aria-describedby.
   const input = fieldInput(editor, t("form.family"));
-  const adornment = editor.locator(".dense-suggestion").filter({ hasText: family });
+  const adornment = editor.locator(".custom-suggestion").filter({ hasText: family });
   await expect(adornment).toBeVisible();
-  await expect(input).toHaveAttribute("aria-describedby", "dense-suggestion-family");
+  await expect(input).toHaveAttribute("aria-describedby", "custom-suggestion-family");
   // The proposer sees their pending suggestion without action buttons.
   await expect(
-    proposer.locator(".dense-suggestion-pending").filter({ hasText: family }),
+    proposer.locator(".custom-suggestion-pending").filter({ hasText: family }),
   ).toBeVisible();
-  await expect(proposer.locator(".dense-suggestion-pending").getByRole("button")).toHaveCount(0);
+  await expect(proposer.locator(".custom-suggestion-pending").getByRole("button")).toHaveCount(0);
 
   await adornment
     .getByRole("button", { name: t("review.acceptLabel", { field: t("form.family") }) })
@@ -134,7 +134,7 @@ test("eSheet view toggle renders the same document", async ({ browser }) => {
   await expect(pageA.locator(".patient-form")).toHaveAttribute("data-ready", "true");
   await expect(fieldInput(pageA, t("form.family"))).toHaveValue(family);
 
-  // An eSheet edit converges back into the dense view in the other browser.
+  // An eSheet edit converges back into the custom view in the other browser.
   const given = `Sheet-${runId}`;
   await fieldInput(pageA, t("form.given")).fill(given);
   await expect(fieldInput(pageB, t("form.given"))).toHaveValue(given);

@@ -1,6 +1,6 @@
 /**
  * Shared Playwright helpers: opening an editor page (own browser context),
- * locating field inputs by accessible label (works for both the dense
+ * locating field inputs by accessible label (works for both the custom
  * editor and the eSheet view — the shared fields carry the same labels),
  * the projection rows / proposals panels, proposing as a proposer, and
  * switching the autosave policy through the UI (waiting for the server ack).
@@ -38,7 +38,7 @@ export async function openEsheetEditor(browser: Browser, path = "/?view=esheet")
   return page;
 }
 
-/** A field input (dense or eSheet), located by its accessible label. */
+/** A field input (custom or eSheet), located by its accessible label. */
 export function fieldInput(page: Page, label: string): Locator {
   return page.getByLabel(label, { exact: true });
 }

@@ -10,7 +10,7 @@ into SQLite — committed according to a selectable autosave policy. A mode
 switcher turns a
 browser into a **proposer** whose edits become reviewable suggestions instead
 of direct writes, and a header view toggle switches between the demo's own
-**dense editor** (default) and the **eSheet**-rendered form.
+**custom editor** (default) and the **eSheet**-rendered form.
 
 What it demonstrates:
 
@@ -19,7 +19,7 @@ What it demonstrates:
   `doc.getMap("resource").toJSON()` refreshed on every doc update; actions mutate
   Y types inside `doc.transact`. Awareness feeds a presence slice
   (`{clientId, name, color, focusedField}`).
-- **Dense custom Patient editor** ([src/client/components/PatientEditor.tsx](src/client/components/PatientEditor.tsx)):
+- **Custom Patient editor** ([src/client/components/PatientEditor.tsx](src/client/components/PatientEditor.tsx)):
   the demo's own compact multi-column editor over the **entire** Patient object,
   generated from the field specs in
   [src/client/patientEditorFields.ts](src/client/patientEditorFields.ts) —
@@ -35,7 +35,7 @@ What it demonstrates:
   built from [src/client/patientFields.ts](src/client/patientFields.ts)
   (given/family names, birth date, phone, email). The eSheet form store and the
   Yjs-backed store are wired both ways, writing only when a value actually
-  differs (echo-safe). The header **Editor: Dense | eSheet** toggle (also
+  differs (echo-safe). The header **Editor: Custom | eSheet** toggle (also
   `?view=esheet`) swaps views over the same store/doc. The `@esheet/*` packages
   are **built from source** out of the [vendor/eSheet](../../vendor/eSheet)
   submodule — see [eSheet from source](#esheet-from-source) — and presence +
@@ -66,7 +66,7 @@ What it demonstrates:
   the view toggle, and the eSheet-native decorations + YAML form config
   ([tests/esheet.spec.ts](tests/esheet.spec.ts)).
 - **Suggestion mode** ([src/client/components/ReviewPanel.tsx](src/client/components/ReviewPanel.tsx)):
-  an editor/proposer mode switcher, inline suggestion adornments on the dense
+  an editor/proposer mode switcher, inline suggestion adornments on the custom
   editor, a top accumulating proposals bar with mass actions, and the
   `yorm_proposal` tracking table in the server terminal — see
   [Write modes & proposed changes](#write-modes--proposed-changes).
@@ -95,11 +95,11 @@ pnpm --filter patient-collab-demo start   # serves client + API on :5178
 ```mermaid
 graph LR
   subgraph BrowserA["Browser A (editor)"]
-    FormA["Patient editor (dense | eSheet)"] <--> StoreA["Zustand store"] <--> DocA["Y.Doc"]
+    FormA["Patient editor (custom | eSheet)"] <--> StoreA["Zustand store"] <--> DocA["Y.Doc"]
     ReviewA["Proposals bar + inline adornments (accept/reject)"]
   end
   subgraph BrowserB["Browser B (proposer)"]
-    FormB["Patient editor (dense | eSheet)"] <--> StoreB["Zustand store"] <--> DocB["Y.Doc"]
+    FormB["Patient editor (custom | eSheet)"] <--> StoreB["Zustand store"] <--> DocB["Y.Doc"]
   end
   DocA <-->|"y-websocket /yorm/ws/Patient/p-demo?mode=editor"| ServerDoc["Server Y.Doc (canonical + yorm:proposals)"]
   DocB <-->|"y-websocket ?mode=proposer (canonical writes refused)"| ServerDoc
@@ -230,7 +230,7 @@ the field specs in [src/client/patientFields.ts](src/client/patientFields.ts) /
 [src/client/patientEditorFields.ts](src/client/patientEditorFields.ts)) and
 stored in the `yorm:proposals` subtree of the same Y.Doc.
 
-In the dense editor an open suggestion renders **inline next to the field**
+In the custom editor an open suggestion renders **inline next to the field**
 (linked via `aria-describedby`): the proposed value and actor, plus — for
 editors — Accept / Reject buttons right there. A stale accept (the canonical
 value changed since the proposal, HTTP 409) surfaces an inline "changed since
@@ -335,14 +335,14 @@ makes the Patient `FormDefinition` editable at runtime:
 
 ## Notes
 
-- The **dense** view is the default; `?view=esheet` (or the header toggle)
+- The **custom** view is the default; `?view=esheet` (or the header toggle)
   renders the eSheet form instead.
 - `@esheet/renderer` declares a React ≥ 19 peer but uses no 19-only APIs; the
   demo runs it on React 18 with Vite `resolve.dedupe` for react/react-dom.
 - The phone field uses eSheet's plain `string` input type (not `tel`): the tel
   mask assumes US numbers and corrupts the fixture's international value.
 
-![The collaborative Patient editor: the top proposals bar with mass actions, the dense Patient editor with the autosave policy dropdown on the left, the Dense | eSheet view toggle in the header, and live SQLite projection rows on the right](docs/screenshot.png)
+![The collaborative Patient editor: the top proposals bar with mass actions, the custom Patient editor with the autosave policy dropdown on the left, the Custom | eSheet view toggle in the header, and live SQLite projection rows on the right](docs/screenshot.png)
 
 ## Tests
 
@@ -354,6 +354,6 @@ pnpm --filter patient-collab-demo test:e2e   # Playwright (chromium)
 The e2e config builds the client and runs the single prod server on :5178 for
 determinism. Specs live in `tests/` so the root vitest suite (which globs
 `test/**/*.test.ts`) does not pick them up. Field locators go through
-accessible labels, which the dense editor and the eSheet view share for the
+accessible labels, which the custom editor and the eSheet view share for the
 common fields; all edited values are run-unique (the server may be reused
 with persisted state, so constant values would be no-op fills).

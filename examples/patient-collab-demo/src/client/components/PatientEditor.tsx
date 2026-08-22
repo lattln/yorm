@@ -1,5 +1,5 @@
 /**
- * The dense custom Patient editor — the demo's own (non-eSheet) UI: a
+ * The custom Patient editor — the demo's own (non-eSheet) UI: a
  * compact multi-column grid over the ENTIRE Patient object, generated from
  * `patientEditorFields.ts` specs. Editor inputs write the Y.Doc directly
  * (`setFieldBySpec` → transact); proposer edits become debounced proposals.
@@ -21,8 +21,8 @@ import type { Patient } from "@yorm/fhir";
 import type { ChangeIntent } from "@yorm/yjs";
 
 import { t } from "../i18n";
-import { buildDenseSections } from "../patientEditorFields";
-import type { DenseFieldSpec } from "../patientEditorFields";
+import { buildCustomSections } from "../patientEditorFields";
+import type { CustomFieldSpec } from "../patientEditorFields";
 import { formatFieldValue, samePath } from "../patientFields";
 import { roleMayEdit } from "../../rolePolicies";
 import { useCollabStore } from "../store";
@@ -53,7 +53,7 @@ export function PatientEditor(): React.JSX.Element | null {
         <span className="patient-editor-id-label">{t("editor.resourceId")}</span>
         <code>{patient.id ?? ""}</code>
       </p>
-      {buildDenseSections(patient).map((section) => (
+      {buildCustomSections(patient).map((section) => (
         <fieldset key={section.id} className="editor-section">
           <legend className="editor-section-legend">
             {section.label}
@@ -65,7 +65,7 @@ export function PatientEditor(): React.JSX.Element | null {
           </legend>
           <div className="editor-section-grid">
             {section.fields.map((spec) => (
-              <DenseField
+              <CustomField
                 key={spec.id}
                 spec={spec}
                 patient={patient}
@@ -83,8 +83,8 @@ export function PatientEditor(): React.JSX.Element | null {
   );
 }
 
-interface DenseFieldProps {
-  spec: DenseFieldSpec;
+interface CustomFieldProps {
+  spec: CustomFieldSpec;
   patient: Patient;
   openProposals: ChangeIntent[];
   peers: Peer[];
@@ -94,7 +94,7 @@ interface DenseFieldProps {
   actions: ProposalActions;
 }
 
-function DenseField(props: DenseFieldProps): React.JSX.Element {
+function CustomField(props: CustomFieldProps): React.JSX.Element {
   const { spec, patient, openProposals, peers, editorMode, readOnly, actions } = props;
   // While focused, the local draft wins over the canonical value so typing
   // is never round-tripped through the doc (and proposer keystrokes — which
@@ -106,8 +106,8 @@ function DenseField(props: DenseFieldProps): React.JSX.Element {
   const proposal = path
     ? openProposals.filter((candidate) => samePath(candidate.path, path)).at(-1)
     : undefined;
-  const inputId = `dense-${spec.id}`;
-  const adornmentId = `dense-suggestion-${spec.id}`;
+  const inputId = `custom-${spec.id}`;
+  const adornmentId = `custom-suggestion-${spec.id}`;
   const editingPeers = peers.filter((peer) => !peer.isLocal && peer.focusedField === spec.id);
 
   // Suggestion-resolution snap-back: when the field's open suggestion goes
@@ -147,15 +147,15 @@ function DenseField(props: DenseFieldProps): React.JSX.Element {
   };
 
   return (
-    <div className={`dense-field${spec.control === "checkbox" ? " dense-field-inline" : ""}`}>
-      <span className="dense-field-head">
-        <label className="dense-label" htmlFor={inputId}>
+    <div className={`custom-field${spec.control === "checkbox" ? " custom-field-inline" : ""}`}>
+      <span className="custom-field-head">
+        <label className="custom-label" htmlFor={inputId}>
           {spec.label}
         </label>
         {editingPeers.map((peer) => (
           <span
             key={peer.clientId}
-            className="dense-peer-dot"
+            className="custom-peer-dot"
             style={{ backgroundColor: peer.color }}
             role="img"
             aria-label={t("editor.peerEditing", { name: peer.name })}
@@ -168,7 +168,7 @@ function DenseField(props: DenseFieldProps): React.JSX.Element {
       {spec.control === "select" ? (
         <select
           {...shared}
-          className={`dense-input${proposal ? " has-suggestion" : ""}`}
+          className={`custom-input${proposal ? " has-suggestion" : ""}`}
           value={draft ?? canonical}
           onChange={(event) => handleChange(event.target.value)}
         >
@@ -182,7 +182,7 @@ function DenseField(props: DenseFieldProps): React.JSX.Element {
         <input
           {...shared}
           type="checkbox"
-          className={`dense-checkbox${proposal ? " has-suggestion" : ""}`}
+          className={`custom-checkbox${proposal ? " has-suggestion" : ""}`}
           checked={canonical === "true"}
           onChange={(event) => handleChange(event.target.checked ? "true" : "false")}
         />
@@ -190,7 +190,7 @@ function DenseField(props: DenseFieldProps): React.JSX.Element {
         <input
           {...shared}
           type={spec.control === "date" ? "date" : "text"}
-          className={`dense-input${proposal ? " has-suggestion" : ""}`}
+          className={`custom-input${proposal ? " has-suggestion" : ""}`}
           value={draft ?? canonical}
           onChange={(event) => handleChange(event.target.value)}
         />
@@ -209,7 +209,7 @@ function DenseField(props: DenseFieldProps): React.JSX.Element {
 }
 
 interface InlineSuggestionProps {
-  spec: DenseFieldSpec;
+  spec: CustomFieldSpec;
   proposal: ChangeIntent;
   adornmentId: string;
   editorMode: boolean;
@@ -223,20 +223,20 @@ function InlineSuggestion(props: InlineSuggestionProps): React.JSX.Element {
   return (
     <span
       id={adornmentId}
-      className={`dense-suggestion${editorMode ? "" : " dense-suggestion-pending"}`}
+      className={`custom-suggestion${editorMode ? "" : " custom-suggestion-pending"}`}
     >
-      <span className="dense-suggestion-value">
+      <span className="custom-suggestion-value">
         {t("review.proposed", { value: formatFieldValue(proposal.proposedValue) })}
       </span>
-      <span className="dense-suggestion-actor">{t("review.actor", { actor: proposal.actor })}</span>
-      {!editorMode && <span className="dense-suggestion-actor">{t("suggestion.pendingHint")}</span>}
+      <span className="custom-suggestion-actor">{t("review.actor", { actor: proposal.actor })}</span>
+      {!editorMode && <span className="custom-suggestion-actor">{t("suggestion.pendingHint")}</span>}
       {conflicted && (
-        <span className="dense-suggestion-conflict" role="alert">
+        <span className="custom-suggestion-conflict" role="alert">
           {t("review.conflict", { value: formatFieldValue(actions.conflicts[proposal.id]) })}
         </span>
       )}
       {editorMode && (
-        <span className="dense-suggestion-actions">
+        <span className="custom-suggestion-actions">
           {conflicted ? (
             <Button
               variant="primary"

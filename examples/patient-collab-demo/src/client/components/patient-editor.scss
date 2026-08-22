@@ -1,4 +1,4 @@
-/* Dense custom Patient editor — compact multi-column grid over the whole
+/* Custom Patient editor — compact multi-column grid over the whole
    Patient object, with inline suggestion adornments and presence dots. */
 
 .patient-editor {
@@ -54,7 +54,7 @@
   gap: 0.5rem 0.75rem;
 }
 
-.dense-field {
+.custom-field {
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -62,19 +62,19 @@
 }
 
 /* Checkbox fields sit inline with their label row. */
-.dense-field-inline {
+.custom-field-inline {
   flex-direction: row;
   align-items: center;
   gap: 0.4rem;
 }
 
-.dense-field-head {
+.custom-field-head {
   display: flex;
   align-items: center;
   gap: 0.3rem;
 }
 
-.dense-label {
+.custom-label {
   font-size: 0.7rem;
   font-weight: 500;
   color: var(--mieweb-muted-foreground);
@@ -83,7 +83,7 @@
   text-overflow: ellipsis;
 }
 
-.dense-peer-dot {
+.custom-peer-dot {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -96,8 +96,8 @@
   color: var(--mieweb-card);
 }
 
-.dense-input,
-.dense-checkbox {
+.custom-input,
+.custom-checkbox {
   font: inherit;
   font-size: 0.85rem;
   color: var(--mieweb-foreground);
@@ -106,27 +106,27 @@
   border-radius: var(--mieweb-radius-sm);
 }
 
-.dense-input {
+.custom-input {
   width: 100%;
   box-sizing: border-box;
   padding: 0.2rem 0.4rem;
 }
 
-.dense-input:focus-visible,
-.dense-checkbox:focus-visible {
+.custom-input:focus-visible,
+.custom-checkbox:focus-visible {
   outline: 2px solid var(--mieweb-ring);
   outline-offset: 1px;
 }
 
 /* An input with an open suggestion — visually distinct pending state. */
-.dense-input.has-suggestion,
-.dense-checkbox.has-suggestion {
+.custom-input.has-suggestion,
+.custom-checkbox.has-suggestion {
   border-color: var(--mieweb-warning);
   box-shadow: 0 0 0 1px var(--mieweb-warning);
 }
 
 /* Inline suggestion adornment right next to the field. */
-.dense-suggestion {
+.custom-suggestion {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -139,26 +139,26 @@
 }
 
 /* The proposer's own pending suggestion (no actions) — muted variant. */
-.dense-suggestion-pending {
+.custom-suggestion-pending {
   border-style: dotted;
   font-style: italic;
 }
 
-.dense-suggestion-value {
+.custom-suggestion-value {
   font-weight: 600;
   color: var(--mieweb-warning);
 }
 
-.dense-suggestion-actor {
+.custom-suggestion-actor {
   color: var(--mieweb-muted-foreground);
 }
 
-.dense-suggestion-conflict {
+.custom-suggestion-conflict {
   flex-basis: 100%;
   color: var(--mieweb-destructive);
 }
 
-.dense-suggestion-actions {
+.custom-suggestion-actions {
   display: flex;
   gap: 0.3rem;
 }

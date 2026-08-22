@@ -18,7 +18,7 @@ export type PatientFieldId = "given" | "family" | "birthDate" | "phone" | "email
 /**
  * The write side of a field spec — everything the store needs to turn a
  * string input value into a Y.Doc write (editor mode) or a change intent
- * (proposer mode). Shared by the eSheet specs below and the dense editor's
+ * (proposer mode). Shared by the eSheet specs below and the custom editor's
  * generated specs (`patientEditorFields.ts`).
  */
 export interface FieldWriteSpec {

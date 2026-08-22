@@ -80,19 +80,28 @@ For each of the five `packages/*/package.json`:
 
 ### R2 — Tarball correctness
 
-- [ ] **Fix source maps.** `npm pack --dry-run` on `@yorm/core` today ships
+- [x] **Fix source maps.** `npm pack --dry-run` on `@yorm/core` used to ship
       `dist/**/*.js.map` and `dist/**/*.d.ts.map` but **no sources**, so every
-      map is dangling. Either add `"src"` to `files` or stop emitting maps for
-      the published build — pick one (Decision #5).
-- [ ] Add `publint` + `@arethetypeswrong/cli` as root devDependencies and a
+      map was dangling. Fixed per Decision #5 by adding `"src"` to `files` in
+      all five manifests — `tsc` emits `sources: ["../src/…"]`, which resolves
+      exactly when `dist` and `src` are siblings in the tarball.
+- [x] Added `publint` + `@arethetypeswrong/cli` as root devDependencies and a
       `pnpm run check:packages` script that runs both over every package.
-- [ ] Add `"prepack": "pnpm build"`-equivalent protection, or make
-      `scripts/release.sh` refuse to run without a clean `pnpm run ci` — the
-      release must not be able to ship a stale `dist` (Decision #6).
-- [ ] Wire `check:packages` into the `ci` script so regressions fail PRs.
+- [~] Stale-`dist` guard — Decision #6 puts it in `scripts/release.sh`, so the
+  checkbox lands with R5.
+- [x] Wired `check:packages` into the root `ci` script so regressions fail PRs
+      (`.github/workflows/ci.yml` already runs `pnpm run ci`, so no workflow
+      change was needed).
 
 **Exit criteria:** `pnpm run check:packages` is green; a tarball installed into
 a scratch project resolves types and `import`s correctly.
+
+> **Verified 2026-08-22.** `pnpm run check:packages` exits 0 (publint "All
+> good!" ×5; attw all-green under `--profile esm-only`, which is the right
+> profile for pure-ESM packages — the only finding was the expected
+> `CJSResolvesToESM`). A scratch ESM project installing the `core`/`yjs`/`fhir`
+> tarballs typechecks under `moduleResolution: NodeNext` and imports at runtime,
+> and all 10 shipped `@yorm/core` maps resolve to real sources.
 
 ### R3 — Transport adapters: freeze the published surface
 
@@ -240,15 +249,14 @@ extraction itself is independent of R0 and can start immediately.
    is, or bump to `0.2.0` to signal that the published artifact differs from the
    long-lived in-repo `0.1.0`. **Recommendation: `0.1.0`** — nothing consumed it
    yet, so there is no version to disambiguate from.
-5. **Source maps — OPEN (2026-08-22).** Ship `src` alongside the maps (bigger
-   tarball, working step-through debugging for consumers) or drop maps from the
-   published build (smaller, no dangling references). **Recommendation: ship
-   `src`** — these are small pure-TS packages and debuggability is worth ~2x
-   tarball size.
-6. **Stale-`dist` guard — OPEN (2026-08-22).** `prepack` runs per package and
-   would rebuild five times; a single guard in `scripts/release.sh` is cheaper
-   but only protects the scripted path. **Recommendation: the script guard**,
-   since `release.yml` is the only sanctioned publish path.
+5. **Source maps — DECIDED (2026-08-22): ship `src`.** These are small pure-TS
+   packages, so working step-through debugging for consumers is worth roughly
+   doubling the tarball. `files: ["dist", "src"]`; `include: ["src"]` in each
+   `tsconfig.json` keeps `test/` out of the tarball.
+6. **Stale-`dist` guard — DECIDED (2026-08-22): guard in `scripts/release.sh`.**
+   `prepack` runs per package and would rebuild five times; `release.yml` is the
+   only sanctioned publish path, so a single guard in the script it calls is
+   cheaper and sufficient.
 7. **Auth hook signature — OPEN (2026-08-22).** `onAuthorize`/`onAuthorizeWrite`
    currently receive Hono's `Context`, which cannot survive the split. Options:
    (a) pass the neutral request to every adapter, or (b) let each adapter pass

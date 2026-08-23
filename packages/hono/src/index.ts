@@ -1,70 +1,33 @@
 /**
- * @yorm/hono — pluggable Hono server component (PLAN.md Milestone 3,
- * deliverable 1): `app.route("/yorm", createHonoYorm(yorm))` turns any Hono
- * app into a YORM server.
+ * @yorm/hono — the Hono transport adapter (PLAN.md Milestone 3, deliverable
+ * 1): `app.route("/yorm", createHonoYorm(yorm))` turns any Hono app into a
+ * YORM server.
  *
- * The plugin only sees `Yorm` interfaces — it has no dependency on any DB
- * package. See packages/hono/README.md for routes, options, and examples.
+ * All behavior lives in [@yorm/server](../server/README.md); this module only
+ * translates Hono's `Context` into a `YormRequest`, its `WSContext` into a
+ * `YormSocket`, and the neutral `YormResponse` back into a `Response`.
+ * See packages/hono/README.md for routes, options, and examples.
  */
 import { Hono } from "hono";
 import type { Context } from "hono";
-import type { UpgradeWebSocket } from "hono/ws";
-import type { ProjectionTriggerPolicy, RolePolicy, Yorm } from "@yorm/yjs";
+import type { UpgradeWebSocket, WSContext, WSEvents, WSMessageReceive } from "hono/ws";
+import type { Yorm } from "@yorm/yjs";
+import { createYormServer } from "@yorm/server";
+import type {
+  HttpMethod,
+  YormRequest,
+  YormResponse,
+  YormServerOptions,
+  YormSocket,
+  YormWebSocketEndpoint,
+} from "@yorm/server";
 
-import { createHttpRoutes } from "./http/index.js";
-import { createSessionCache } from "./shared.js";
-import { createWebSocketRoutes } from "./websocket/index.js";
-
-export { guardCanonicalWrites } from "./websocket/index.js";
+export { guardCanonicalWrites } from "@yorm/server";
+export type { WriteScope, YormRequest, YormServerOptions } from "@yorm/server";
 
 export const YORM_HONO_VERSION = "0.1.0";
 
-/** Which subtree of the document a write targets (PLAN.md M7). */
-export type WriteScope = "canonical" | "proposals";
-
-export interface HonoYormOptions {
-  /**
-   * Authorization hook, run before every HTTP route and WebSocket upgrade.
-   * Returning `false` yields 403 on HTTP and close code 1008 on WebSocket.
-   */
-  onAuthorize?: (ctx: Context, docRef: { type: string; id: string }) => boolean | Promise<boolean>;
-  /**
-   * Per-subtree write authorization (PLAN.md M7): run in addition to
-   * `onAuthorize` before any write. Scope is `"canonical"` for PUT/PATCH and
-   * proposal resolution (accepting writes canonical state), `"proposals"`
-   * for creating/withdrawing proposals. On WebSocket connections the scope
-   * is chosen by the `?mode=proposer` query param: proposer connections need
-   * `"proposals"` write access and have direct canonical edits refused (see
-   * `guardCanonicalWrites`); all other connections need `"canonical"`.
-   * Absent hook means allow. Returning `false` yields 403 / close 1008.
-   */
-  onAuthorizeWrite?: (
-    ctx: Context,
-    docRef: { type: string; id: string },
-    scope: WriteScope,
-  ) => boolean | Promise<boolean>;
-  /**
-   * Role policies (role-security POC): when a WebSocket connection's
-   * `?role=` matches a policy for the document type, the connection syncs a
-   * server-held **policy lens** — a derived doc holding only the role's
-   * `view` — instead of the canonical doc, and every incoming update is
-   * validated by the policy's `canWrite` (violations close the socket with
-   * 1008). Roles without a policy are untouched. **POC caveat:** the HTTP
-   * routes are not policy-aware yet — deny REST access for lens roles via
-   * `onAuthorize`/`onAuthorizeWrite`.
-   */
-  rolePolicies?: RolePolicy[];
-  /**
-   * Projection trigger policy applied when the plugin opens a document
-   * session. Defaults to the Yorm instance's own default (passthrough).
-   */
-  defaultPolicy?: ProjectionTriggerPolicy;
-  /**
-   * Plugin-level safety cap: at most this many ms may pass between a
-   * persisted change and a forced projection flush, so deferred policies
-   * (`explicit`, `on-blur`) cannot lag forever.
-   */
-  maxLagMs?: number;
+export interface HonoYormOptions extends YormServerOptions {
   /**
    * Runtime-specific WebSocket upgrader (e.g. `createNodeWebSocket(...)`
    * from `@hono/node-ws`, or Bun/Deno/Cloudflare equivalents). When
@@ -74,16 +37,102 @@ export interface HonoYormOptions {
   upgradeWebSocket?: UpgradeWebSocket;
 }
 
+/** Hono's `Context` seen through the neutral request contract. */
+function honoRequest(c: Context): YormRequest {
+  return {
+    method: c.req.method,
+    path: c.req.path,
+    param: (name) => c.req.param(name),
+    query: (name) => c.req.query(name),
+    header: (name) => c.req.header(name),
+    json: () => c.req.json(),
+    rawBody: async () => new Uint8Array(await c.req.arrayBuffer()),
+  };
+}
+
+/**
+ * Built directly rather than through `c.json()` so the neutral numeric status
+ * does not have to satisfy Hono's status-literal types.
+ */
+function toResponse(response: YormResponse): Response {
+  return response.body === undefined
+    ? new Response(null, { status: response.status })
+    : Response.json(response.body, { status: response.status });
+}
+
+const HONO_METHOD = {
+  GET: "get",
+  PUT: "put",
+  PATCH: "patch",
+  POST: "post",
+  DELETE: "delete",
+} as const satisfies Record<HttpMethod, "get" | "put" | "patch" | "post" | "delete">;
+
+/** Binary frames only; strings/Blobs are ignored (the Yjs protocol is binary). */
+function toUint8Array(data: WSMessageReceive): Uint8Array | null {
+  if (data instanceof Uint8Array) {
+    return data;
+  }
+  if (data instanceof ArrayBuffer) {
+    return new Uint8Array(data);
+  }
+  return null;
+}
+
+function honoSocket(ws: WSContext<unknown>): YormSocket {
+  return {
+    // lib0 encoders are backed by plain ArrayBuffers, which is what send wants.
+    send: (data) => ws.send(data as Uint8Array<ArrayBuffer>),
+    close: (code, reason) => ws.close(code, reason),
+  };
+}
+
+function mountWebSocket(upgradeWebSocket: UpgradeWebSocket, endpoint: YormWebSocketEndpoint): Hono {
+  const app = new Hono();
+  app.get(
+    endpoint.path,
+    upgradeWebSocket(async (c): Promise<WSEvents<unknown>> => {
+      const handlers = await endpoint.connect(honoRequest(c));
+      // The room excludes the origin socket by reference, so one connection
+      // must map to one YormSocket across all of its events.
+      let socket: YormSocket | null = null;
+      const socketFor = (ws: WSContext<unknown>): YormSocket => (socket ??= honoSocket(ws));
+      return {
+        onOpen(_evt, ws) {
+          handlers.onOpen(socketFor(ws));
+        },
+        onMessage(evt, ws) {
+          const data = toUint8Array(evt.data);
+          if (data !== null) {
+            handlers.onMessage(socketFor(ws), data);
+          }
+        },
+        onClose(_evt, ws) {
+          handlers.onClose(socketFor(ws));
+        },
+        onError(_evt, ws) {
+          handlers.onClose(socketFor(ws));
+        },
+      };
+    }),
+  );
+  return app;
+}
+
 /**
  * Creates the mountable YORM sub-app: the REST routes under `/docs/*`, plus
  * the WebSocket route under `/ws/*` when `options.upgradeWebSocket` is given.
  */
 export function createHonoYorm(yorm: Yorm, options: HonoYormOptions = {}): Hono {
-  const sessions = createSessionCache(yorm, options);
+  const server = createYormServer(yorm, options);
   const app = new Hono();
-  app.route("/", createHttpRoutes(yorm, sessions, options));
+  for (const route of server.routes) {
+    app[HONO_METHOD[route.method]](route.path, async (c) =>
+      toResponse(await route.handle(honoRequest(c))),
+    );
+  }
   if (options.upgradeWebSocket) {
-    app.route("/", createWebSocketRoutes(options.upgradeWebSocket, sessions, options));
+    app.route("/", mountWebSocket(options.upgradeWebSocket, server.websocket));
   }
   return app;
 }
@@ -91,13 +140,16 @@ export function createHonoYorm(yorm: Yorm, options: HonoYormOptions = {}): Hono 
 /**
  * Creates a sub-app containing only `GET /ws/:type/:id` (y-protocols sync +
  * awareness). The upgrader is injected because Hono's `upgradeWebSocket` is
- * runtime-specific — this keeps the plugin free of runtime lock-in.
+ * runtime-specific — this keeps the adapter free of runtime lock-in.
+ *
+ * This mounts its **own** session cache, so use it only when the REST routes
+ * are not mounted; otherwise pass `upgradeWebSocket` to {@link createHonoYorm}
+ * so HTTP writes broadcast to the WebSocket clients of the same document.
  */
 export function createHonoYormWebSocket(
   yorm: Yorm,
   upgradeWebSocket: UpgradeWebSocket,
   options: HonoYormOptions = {},
 ): Hono {
-  const sessions = createSessionCache(yorm, options);
-  return createWebSocketRoutes(upgradeWebSocket, sessions, options);
+  return mountWebSocket(upgradeWebSocket, createYormServer(yorm, options).websocket);
 }

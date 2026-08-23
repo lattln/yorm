@@ -1,13 +1,11 @@
 /**
- * WebSocket routes of the YORM Hono plugin — `GET /ws/:type/:id` speaking
- * the standard Yjs wire protocol (y-protocols sync + awareness), so any
+ * The YORM collaboration endpoint — `GET /ws/:type/:id` speaking the standard
+ * Yjs wire protocol (y-protocols sync + awareness), so any
  * y-websocket-compatible client can connect.
  *
- * Hono's `upgradeWebSocket` is runtime-specific (Node/Bun/Deno/CF), so it is
- * injected by the caller; this module has no runtime lock-in.
+ * Everything here is expressed against {@link YormSocket}, so the same room,
+ * awareness, and policy-lens logic serves every transport adapter.
  */
-import { Hono } from "hono";
-import type { UpgradeWebSocket, WSContext, WSEvents, WSMessageReceive } from "hono/ws";
 import * as decoding from "lib0/decoding";
 import * as encoding from "lib0/encoding";
 import * as awarenessProtocol from "y-protocols/awareness";
@@ -16,22 +14,23 @@ import * as Y from "yjs";
 import { DEFAULT_ROOT_KEY, createPolicyLens, policyFor } from "@yorm/yjs";
 import type { DocumentSession, PolicyLens } from "@yorm/yjs";
 
-import type { HonoYormOptions, WriteScope } from "../index.js";
 import type { SessionCache } from "../shared.js";
 import { authorize, authorizeWrite, policyFromQuery } from "../shared.js";
+import type {
+  WriteScope,
+  YormRequest,
+  YormServerOptions,
+  YormSocket,
+  YormSocketHandlers,
+  YormWebSocketEndpoint,
+} from "../types.js";
 
 /** y-websocket wire message types. */
 const MESSAGE_SYNC = 0;
 const MESSAGE_AWARENESS = 1;
 
-type AnySocket = WSContext<unknown>;
-
-/** What `WSContext.send` accepts for binary frames. */
-type BinaryFrame = Uint8Array<ArrayBuffer>;
-
-/** lib0 encoders are backed by plain `ArrayBuffer`s; narrow the type for `send`. */
-function toFrame(encoder: encoding.Encoder): BinaryFrame {
-  return encoding.toUint8Array(encoder) as BinaryFrame;
+function toFrame(encoder: encoding.Encoder): Uint8Array {
+  return encoding.toUint8Array(encoder);
 }
 
 /**
@@ -52,15 +51,15 @@ interface Room {
   /** Non-null when this room serves a role with a policy lens. */
   lens: PolicyLens | null;
   awareness: awarenessProtocol.Awareness;
-  sockets: Set<AnySocket>;
+  sockets: Set<YormSocket>;
   /** Awareness client ids introduced by each socket (removed on close). */
-  controlledIds: Map<AnySocket, Set<number>>;
+  controlledIds: Map<YormSocket, Set<number>>;
   /**
    * The socket whose incoming message is currently being applied. Update
    * fan-out is synchronous, so this lets the room broadcast to every socket
    * EXCEPT the origin (y-protocols tolerates echo, but we avoid it).
    */
-  currentOrigin: AnySocket | null;
+  currentOrigin: YormSocket | null;
   /** Tears down the session subscription. */
   unsubscribe: () => void;
 }
@@ -71,36 +70,25 @@ interface AwarenessChange {
   removed: number[];
 }
 
-function encodeSyncStep1(doc: DocumentSession["doc"]): BinaryFrame {
+function encodeSyncStep1(doc: Y.Doc): Uint8Array {
   const encoder = encoding.createEncoder();
   encoding.writeVarUint(encoder, MESSAGE_SYNC);
   syncProtocol.writeSyncStep1(encoder, doc);
   return toFrame(encoder);
 }
 
-function encodeDocUpdate(update: Uint8Array): BinaryFrame {
+function encodeDocUpdate(update: Uint8Array): Uint8Array {
   const encoder = encoding.createEncoder();
   encoding.writeVarUint(encoder, MESSAGE_SYNC);
   syncProtocol.writeUpdate(encoder, update);
   return toFrame(encoder);
 }
 
-function encodeAwareness(awareness: awarenessProtocol.Awareness, clients: number[]): BinaryFrame {
+function encodeAwareness(awareness: awarenessProtocol.Awareness, clients: number[]): Uint8Array {
   const encoder = encoding.createEncoder();
   encoding.writeVarUint(encoder, MESSAGE_AWARENESS);
   encoding.writeVarUint8Array(encoder, awarenessProtocol.encodeAwarenessUpdate(awareness, clients));
   return toFrame(encoder);
-}
-
-/** Binary frames only; strings/Blobs are ignored (the Yjs protocol is binary). */
-function toUint8Array(data: WSMessageReceive): Uint8Array | null {
-  if (data instanceof Uint8Array) {
-    return data;
-  }
-  if (data instanceof ArrayBuffer) {
-    return new Uint8Array(data);
-  }
-  return null;
 }
 
 /**
@@ -184,7 +172,9 @@ function createRoom(
   // awareness changes to every socket except the origin.
   const onAwarenessUpdate = (change: AwarenessChange, origin: unknown): void => {
     const socketOrigin =
-      origin !== null && room.controlledIds.has(origin as AnySocket) ? (origin as AnySocket) : null;
+      origin !== null && room.controlledIds.has(origin as YormSocket)
+        ? (origin as YormSocket)
+        : null;
     if (socketOrigin !== null) {
       const owned = room.controlledIds.get(socketOrigin)!;
       for (const clientId of [...change.added, ...change.updated]) {
@@ -217,7 +207,7 @@ function createRoom(
   return room;
 }
 
-function leaveRoom(room: Room, socket: AnySocket): void {
+function leaveRoom(room: Room, socket: YormSocket): void {
   if (!room.sockets.delete(socket)) {
     return;
   }
@@ -233,15 +223,22 @@ function leaveRoom(room: Room, socket: AnySocket): void {
   }
 }
 
+/** Handlers for an upgrade that failed authorization. */
+const refuse = (reason: string): YormSocketHandlers => ({
+  onOpen(socket) {
+    socket.close(1008, reason);
+  },
+  onMessage() {},
+  onClose() {},
+});
+
 /**
- * Builds the `/ws/:type/:id` sub-app around an injected `upgradeWebSocket`.
+ * Builds the `/ws/:type/:id` endpoint over the shared session cache.
  */
-export function createWebSocketRoutes(
-  upgradeWebSocket: UpgradeWebSocket,
+export function createWebSocketEndpoint(
   sessions: SessionCache,
-  options: HonoYormOptions,
-): Hono {
-  const app = new Hono();
+  options: YormServerOptions,
+): YormWebSocketEndpoint {
   const rooms = new Map<string, Room>();
 
   const getRoom = async (type: string, id: string, role: string | undefined): Promise<Room> => {
@@ -265,12 +262,12 @@ export function createWebSocketRoutes(
     return room;
   };
 
-  app.get(
-    "/ws/:type/:id",
-    upgradeWebSocket(async (c): Promise<WSEvents<unknown>> => {
-      const type = c.req.param("type") ?? "";
-      const id = c.req.param("id") ?? "";
-      const role = c.req.query("role");
+  return {
+    path: "/ws/:type/:id",
+    async connect(request: YormRequest): Promise<YormSocketHandlers> {
+      const type = request.param("type") ?? "";
+      const id = request.param("id") ?? "";
+      const role = request.query("role");
       // `?role=` names WHO is connecting (policy-lens roles); `?mode=` names
       // HOW they write. A role with a policy syncs through its lens (the
       // policy governs reads and writes); `?mode=proposer` connections may
@@ -278,38 +275,31 @@ export function createWebSocketRoutes(
       // writer (v1: no read-only sockets).
       const hasLens = policyFor(options.rolePolicies, type, role) !== null;
       const scope: WriteScope =
-        !hasLens && c.req.query("mode") === "proposer" ? "proposals" : "canonical";
+        !hasLens && request.query("mode") === "proposer" ? "proposals" : "canonical";
       if (
-        !(await authorize(c, options, type, id)) ||
-        !(await authorizeWrite(c, options, type, id, scope))
+        !(await authorize(request, options, type, id)) ||
+        !(await authorizeWrite(request, options, type, id, scope))
       ) {
-        return {
-          onOpen(_evt, ws) {
-            ws.close(1008, "forbidden");
-          },
-        };
+        return refuse("forbidden");
       }
       const guardCanonical = scope === "proposals";
       const room = await getRoom(type, id, hasLens ? role : undefined);
-      const policy = policyFromQuery(c.req.query("policy"), c.req.query("idleMs"));
+      const policy = policyFromQuery(request.query("policy"), request.query("idleMs"));
+
       return {
-        onOpen(_evt, ws) {
-          room.sockets.add(ws);
-          room.controlledIds.set(ws, new Set());
+        onOpen(socket) {
+          room.sockets.add(socket);
+          room.controlledIds.set(socket, new Set());
           if (policy !== null) {
             room.session.setPolicy(policy);
           }
-          ws.send(encodeSyncStep1(room.source.doc));
+          socket.send(encodeSyncStep1(room.source.doc));
           const states = room.awareness.getStates();
           if (states.size > 0) {
-            ws.send(encodeAwareness(room.awareness, [...states.keys()]));
+            socket.send(encodeAwareness(room.awareness, [...states.keys()]));
           }
         },
-        onMessage(evt, ws) {
-          const data = toUint8Array(evt.data);
-          if (data === null) {
-            return;
-          }
+        onMessage(socket, data) {
           const decoder = decoding.createDecoder(data);
           switch (decoding.readVarUint(decoder)) {
             case MESSAGE_SYNC: {
@@ -319,11 +309,11 @@ export function createWebSocketRoutes(
                   // Doc-mutating message: route it through the lens (policy
                   // validation + canonical write-back). Fan-out is
                   // synchronous, so mark this socket as the origin.
-                  room.currentOrigin = ws;
+                  room.currentOrigin = socket;
                   try {
                     const result = room.lens.applyClientUpdate(payload);
                     if (!result.allowed) {
-                      ws.close(1008, result.reason);
+                      socket.close(1008, result.reason);
                     }
                   } finally {
                     room.currentOrigin = null;
@@ -337,7 +327,7 @@ export function createWebSocketRoutes(
                 const payload = updatePayloadOf(data);
                 if (payload !== null && guardCanonicalWrites(room.session.doc, payload)) {
                   // Refuse the update entirely (never applied server-side).
-                  ws.close(1008, "proposer role: canonical writes are forbidden");
+                  socket.close(1008, "proposer role: canonical writes are forbidden");
                   return;
                 }
               }
@@ -345,14 +335,14 @@ export function createWebSocketRoutes(
               encoding.writeVarUint(encoder, MESSAGE_SYNC);
               // Applying the message mutates the doc; fan-out is synchronous,
               // so mark this socket as the origin for the duration.
-              room.currentOrigin = ws;
+              room.currentOrigin = socket;
               try {
-                syncProtocol.readSyncMessage(decoder, encoder, room.source.doc, ws);
+                syncProtocol.readSyncMessage(decoder, encoder, room.source.doc, socket);
               } finally {
                 room.currentOrigin = null;
               }
               if (encoding.length(encoder) > 1) {
-                ws.send(toFrame(encoder));
+                socket.send(toFrame(encoder));
               }
               break;
             }
@@ -360,20 +350,15 @@ export function createWebSocketRoutes(
               awarenessProtocol.applyAwarenessUpdate(
                 room.awareness,
                 decoding.readVarUint8Array(decoder),
-                ws,
+                socket,
               );
               break;
           }
         },
-        onClose(_evt, ws) {
-          leaveRoom(room, ws);
-        },
-        onError(_evt, ws) {
-          leaveRoom(room, ws);
+        onClose(socket) {
+          leaveRoom(room, socket);
         },
       };
-    }),
-  );
-
-  return app;
+    },
+  };
 }

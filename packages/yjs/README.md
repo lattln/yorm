@@ -21,7 +21,7 @@ policy-driven scheduler that projects the latest state through the
 `write` is a merge-style semantic replace in a single transaction; `read`
 materializes plain JSON. `applyJsonPatchLike(doc, rootKey, path, value)` sets
 (or removes, when `value === undefined`) a nested value semantically, creating
-intermediate containers — the `@yorm/hono` PATCH endpoint builds on it.
+intermediate containers — the `@yorm/server` PATCH endpoint builds on it.
 
 ## Projection trigger policies (PLAN.md decision #10)
 
@@ -45,7 +45,7 @@ expose `lastError`; the next trigger retries.
 `memoryRuntime()` caches one `ManagedDocument` per `${type}/${id}`. It loads
 existing state from the configured `DocumentStore`, persists each update
 (`appendUpdate` + `saveSnapshot`), increments `version` per persisted update,
-and fans updates out to subscribers — the transport hook `@yorm/hono` uses.
+and fans updates out to subscribers — the transport hook `@yorm/server` uses.
 Local `doc.transact(...)` edits and remote `applyUpdate(...)` are treated
 identically.
 
@@ -145,7 +145,7 @@ appear in `yorm_proposal` rows while **never** appearing in canonical-mapping
 rows.
 
 Server-side write-mode enforcement (proposer vs. editor) lives in
-[@yorm/hono](../hono/README.md) (`onAuthorizeWrite` + the WebSocket
+[@yorm/server](../server/README.md) (`onAuthorizeWrite` + the WebSocket
 canonical-write guard).
 
 ## Role policies — the policy lens (role-security POC)
@@ -196,7 +196,7 @@ concurrent edits to the same visible section resolve last-writer-wins at the
 section level; denied updates are refused as a whole.
 
 Transport wiring (`?role=` → lens rooms) lives in
-[@yorm/hono](../hono/README.md#role-policies-policy-lens-role-security-poc).
+[@yorm/server](../server/README.md#role-policies-policy-lens-role-security-poc).
 
 ## Replay & failed-projection retry (PLAN.md M8)
 

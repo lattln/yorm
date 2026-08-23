@@ -18,6 +18,7 @@
     "@hono/node-server": "^2.0.5",
     "@mieweb/ui": "link:../../vendor/ui",
     "@yorm/fhir": "workspace:*",
+    "@yorm/hono": "workspace:*",
     "@yorm/yjs": "workspace:*",
     "example-fhir-patient-contacts": "workspace:*",
     "hono": "^4.6.11",

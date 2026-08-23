@@ -45,9 +45,8 @@
   },
   "dependencies": {
     "@yorm/core": "workspace:*",
-    "@yorm/yjs": "workspace:*",
-    "lib0": "^0.2.98",
-    "y-protocols": "^1.0.6"
+    "@yorm/server": "workspace:*",
+    "@yorm/yjs": "workspace:*"
   },
   "peerDependencies": {
     "hono": "^4",
@@ -57,7 +56,9 @@
     "@hono/node-server": "^2.0.5",
     "@hono/node-ws": "^1.0.4",
     "hono": "^4.6.11",
+    "lib0": "^0.2.98",
     "typescript": "^5.6.3",
+    "y-protocols": "^1.0.6",
     "yjs": "^13.6.20"
   }
 }

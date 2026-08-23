@@ -118,43 +118,44 @@ with Express.
 
 #### R3a. `@yorm/server` — framework-neutral core
 
-- [ ] Define the minimal request abstraction: `method`, `path`, `param(name)`,
+- [x] Define the minimal request abstraction: `method`, `path`, `param(name)`,
       `query(name)`, `header(name)`, `json()`, and **`rawBody()`** — raw body is
       part of the contract from day one so YOTA webhook signature verification
       is possible without another breaking change.
-- [ ] Define the minimal socket abstraction: `send(Uint8Array)`,
+- [x] Define the minimal socket abstraction: `send(Uint8Array)`,
       `close(code, reason)`, and identity comparison (room fan-out skips the
       origin socket by reference).
-- [ ] Move `packages/hono/src/shared.ts` essentially unchanged (session cache,
+- [x] Move `packages/hono/src/shared.ts` essentially unchanged (session cache,
       `openSession`, `attachMaxLagFlush`, `parsePolicy`, `policyFromQuery`).
-- [ ] Move the room registry, y-protocols sync/awareness handling, the policy
+- [x] Move the room registry, y-protocols sync/awareness handling, the policy
       lens wiring, and `guardCanonicalWrites` unchanged.
-- [ ] Re-type `onAuthorize`/`onAuthorizeWrite` against the neutral request
+- [x] Re-type `onAuthorize`/`onAuthorizeWrite` against the neutral request
       (Decision #7).
 
 #### R3b. Transport conformance suite
 
-- [ ] Generalize [packages/hono/test/miniClient.ts](packages/hono/test/miniClient.ts)
-      into a reusable y-protocols client — this is the third shared suite,
-      after `adapterConformanceTests` and the (proposed) connector suite.
-- [ ] Suite contents: document CRUD over HTTP, `onAuthorize`/`onAuthorizeWrite`
+- [x] Generalize `packages/hono/test/miniClient.ts` into a reusable
+      y-protocols client — this is the third shared suite, after
+      `adapterConformanceTests` and the (proposed) connector suite. `MiniClient`
+      and `until()` now ship from `@yorm/server`; the hono copy was deleted.
+- [x] Suite contents: document CRUD over HTTP, `onAuthorize`/`onAuthorizeWrite`
       refusals (403 / close 1008), two WebSocket clients converge, proposer-mode
       canonical-write guard, and role-lens redaction.
-- [ ] Each adapter supplies a `start()`/`stop()` harness returning a base URL;
+- [x] Each adapter supplies a `start()`/`stop()` harness returning a base URL;
       WebSocket coverage needs a real Node listener on an ephemeral port, so the
       suite cannot rely on Hono's in-process `app.request()`.
 
 #### R3c. Adapters
 
-- [ ] `@yorm/hono` — refactor in place into a thin adapter. The existing
+- [x] `@yorm/hono` — refactor in place into a thin adapter. The existing
       `http.test.ts` / `websocket.test.ts` / `websocket-policy.test.ts` are the
       regression suite: behavior must not change.
-- [ ] `@yorm/fastify` — `fastify-plugin` + `@fastify/websocket`; raw body via
+- [x] `@yorm/fastify` — `@fastify/websocket`; raw body via
       `addContentTypeParser`.
-- [ ] `@yorm/express` — Express 5, WebSocket upgrade handled by the raw `ws`
+- [x] `@yorm/express` — Express 5, WebSocket upgrade handled by the raw `ws`
       package attached to the underlying `http.Server` (Decision #8); raw body
-      via `express.json({ verify })`.
-- [ ] Update [examples/patient-collab-demo/src/server.ts](examples/patient-collab-demo/src/server.ts)
+      via `express.raw()`.
+- [x] Update [examples/patient-collab-demo/src/server.ts](examples/patient-collab-demo/src/server.ts)
       — it is the only in-repo consumer of the hook signature, using
       `c.req.header("x-demo-mode")` and `c.req.query("mode")`, both of which the
       neutral request covers directly.
@@ -162,6 +163,24 @@ with Express.
 **Exit criteria:** the shared transport suite is green on all three adapters;
 the demo server runs unchanged in behavior; `@yorm/hono`'s pre-refactor tests
 still pass.
+
+> **Done 2026-08-22.** `pnpm run ci` green: 218 tests / 24 files, including the
+> 11-test conformance suite run three times (hono, fastify, express). Three
+> deviations from the bullets above, all deliberate:
+>
+> - **Fastify is not wrapped in `fastify-plugin`.** The plugin must remove the
+>   built-in JSON parser (Fastify prefers exact-match parsers over regex ones)
+>   to guarantee `rawBody()`; staying encapsulated keeps that scoped to the
+>   plugin so the host app's body parsing is untouched.
+> - **Express uses `express.raw({ type: () => true })`, not
+>   `express.json({ verify })`** — one body mechanism means malformed JSON
+>   surfaces as YORM's `400 { error }` instead of Express's own error page.
+> - **The pre-refactor WS tests now assert `closed?.code`** rather than the
+>   whole `closed` object: the shared `MiniClient` also records the close
+>   `reason`. Behavior is unchanged.
+>
+> Docs: [packages/server/README.md](packages/server/README.md) is now the
+> authoritative protocol reference; the adapter READMEs cover mounting only.
 
 ### R4 — Versioning with Changesets
 
@@ -240,9 +259,10 @@ extraction itself is independent of R0 and can start immediately.
 2. **License — DECIDED (2026-08-22): MIT**, the mieweb open-source default.
    Root [LICENSE](LICENSE) is the single copy; `pnpm publish` copies it into
    every tarball, and each manifest declares `"license": "MIT"`.
-3. **Fixed vs. independent versioning — OPEN (2026-08-22).** The five packages
-   are tightly coupled (`@yorm/fhir` and `@yorm/hono` both depend on `core` +
-   `yjs`) and all sit at `0.1.0`. **Recommendation: `fixed`** while pre-1.0 —
+3. **Fixed vs. independent versioning — OPEN (2026-08-22).** The eight packages
+   are tightly coupled (after R3, all three transport adapters depend on
+   `@yorm/server`, which depends on `core` + `yjs`) and all sit at `0.1.0`.
+   **Recommendation: `fixed`** while pre-1.0 —
    one version number for the whole surface is far easier to document, and
    Changesets can be switched to independent later.
 4. **First published version — OPEN (2026-08-22).** Options: publish `0.1.0` as
@@ -257,14 +277,13 @@ extraction itself is independent of R0 and can start immediately.
    `prepack` runs per package and would rebuild five times; `release.yml` is the
    only sanctioned publish path, so a single guard in the script it calls is
    cheaper and sufficient.
-7. **Auth hook signature — OPEN (2026-08-22).** `onAuthorize`/`onAuthorizeWrite`
-   currently receive Hono's `Context`, which cannot survive the split. Options:
-   (a) pass the neutral request to every adapter, or (b) let each adapter pass
-   its own native context through a generic. **Recommendation: (a)** — the only
-   in-repo consumer needs just `header()` and `query()`, and a neutral hook
-   means an authorization rule written once works on all three frameworks. This
-   is a breaking change to `@yorm/hono`'s current API, which is exactly why it
-   must happen before the first publish.
+7. **Auth hook signature — DECIDED (2026-08-22): (a) the neutral request.**
+   `onAuthorize`/`onAuthorizeWrite` used to receive Hono's `Context`, which
+   cannot survive the split. Passing the neutral `YormRequest` means an
+   authorization rule written once works on all three frameworks; the only
+   in-repo consumer needed just `header()` and `query()`. This is a breaking
+   change to `@yorm/hono`'s API, which is exactly why it happened before the
+   first publish.
 8. **Express flavor — DECIDED (2026-08-22): Express 5 with the raw `ws`
    package** attached to the underlying `http.Server`, rather than `express-ws`.
    Express has no native WebSocket support; `express-ws` is a thin, sparsely

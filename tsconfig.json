@@ -4,7 +4,10 @@
     { "path": "packages/core" },
     { "path": "packages/yjs" },
     { "path": "packages/drizzle" },
+    { "path": "packages/server" },
     { "path": "packages/hono" },
+    { "path": "packages/fastify" },
+    { "path": "packages/express" },
     { "path": "packages/fhir" },
     { "path": "examples/fhir-patient-contacts" }
   ]

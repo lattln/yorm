@@ -1,16 +1,15 @@
 /**
- * Shared plugin internals: the per-document session cache, the authorization
- * hook, and projection-trigger-policy parsing — used by both the HTTP routes
- * (`src/http/`) and the WebSocket routes (`src/websocket/`).
+ * Shared server internals: the per-document session cache, the authorization
+ * hooks, and projection-trigger-policy parsing — used by both the HTTP routes
+ * (`src/http/`) and the WebSocket endpoint (`src/websocket/`).
  */
-import type { Context } from "hono";
 import type { DocumentSession, ProjectionTriggerPolicy, Yorm } from "@yorm/yjs";
 
-import type { HonoYormOptions, WriteScope } from "./index.js";
+import type { WriteScope, YormRequest, YormServerOptions } from "./types.js";
 
 /**
  * Per-document session cache. Sessions are opened once and reused for the
- * lifetime of the plugin (never closed per request): HTTP requests are
+ * lifetime of the server (never closed per request): HTTP requests are
  * stateless, and `@yorm/yjs` shares one channel (doc + scheduler) per
  * document underneath, so caching the session is both correct and cheap.
  */
@@ -19,11 +18,11 @@ export interface SessionCache {
 }
 
 /**
- * Creates the session cache. On first open per document the plugin applies
+ * Creates the session cache. On first open per document the server applies
  * `options.defaultPolicy` (if any) and arms the `options.maxLagMs` safety
  * flush (if any).
  */
-export function createSessionCache(yorm: Yorm, options: HonoYormOptions): SessionCache {
+export function createSessionCache(yorm: Yorm, options: YormServerOptions): SessionCache {
   const cache = new Map<string, Promise<DocumentSession>>();
   return {
     get(type: string, id: string): Promise<DocumentSession> {
@@ -42,7 +41,7 @@ async function openSession(
   yorm: Yorm,
   type: string,
   id: string,
-  options: HonoYormOptions,
+  options: YormServerOptions,
 ): Promise<DocumentSession> {
   const session = await yorm.open(type, id);
   if (options.defaultPolicy) {
@@ -55,11 +54,11 @@ async function openSession(
 }
 
 /**
- * Plugin-level max-lag safety cap: after a persisted change, at most
+ * Server-level max-lag safety cap: after a persisted change, at most
  * `maxLagMs` may pass before a flush is forced, so `explicit` / `on-blur`
  * sessions cannot defer projection forever. (The scheduler in `@yorm/yjs`
- * has its own `maxLagMs`; this plugin option covers Yorm instances created
- * without one.) Timers only exist while changes are pending.
+ * has its own `maxLagMs`; this option covers Yorm instances created without
+ * one.) Timers only exist while changes are pending.
  */
 function attachMaxLagFlush(session: DocumentSession, maxLagMs: number): void {
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -76,21 +75,21 @@ function attachMaxLagFlush(session: DocumentSession, maxLagMs: number): void {
 
 /** Runs the `onAuthorize` hook; absent hook means allow. */
 export async function authorize(
-  ctx: Context,
-  options: HonoYormOptions,
+  request: YormRequest,
+  options: YormServerOptions,
   type: string,
   id: string,
 ): Promise<boolean> {
   if (!options.onAuthorize) {
     return true;
   }
-  return await options.onAuthorize(ctx, { type, id });
+  return await options.onAuthorize(request, { type, id });
 }
 
 /** Runs the per-subtree `onAuthorizeWrite` hook; absent hook means allow. */
 export async function authorizeWrite(
-  ctx: Context,
-  options: HonoYormOptions,
+  request: YormRequest,
+  options: YormServerOptions,
   type: string,
   id: string,
   scope: WriteScope,
@@ -98,7 +97,7 @@ export async function authorizeWrite(
   if (!options.onAuthorizeWrite) {
     return true;
   }
-  return await options.onAuthorizeWrite(ctx, { type, id }, scope);
+  return await options.onAuthorizeWrite(request, { type, id }, scope);
 }
 
 const POLICY_KINDS = ["every-change", "on-blur", "idle", "explicit"] as const;

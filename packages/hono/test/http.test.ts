@@ -171,7 +171,7 @@ describe("@yorm/hono HTTP routes", () => {
   it("onAuthorize false yields 403 on every route", async () => {
     const { app, projections } = makeApp({
       onAuthorize: (ctx, docRef) =>
-        ctx.req.header("authorization") === "Bearer ok" && docRef.type === "Patient",
+        ctx.header("authorization") === "Bearer ok" && docRef.type === "Patient",
     });
     for (const [path, init] of [
       ["/yorm/docs/Patient/p1", undefined],
@@ -239,7 +239,7 @@ describe("@yorm/hono proposal routes (PLAN.md M7)", () => {
   /** mode from `?mode=`; proposers may only write the proposals subtree. */
   const modeOptions: HonoYormOptions = {
     onAuthorizeWrite: (ctx, _docRef, scope) =>
-      (ctx.req.query("mode") ?? "editor") === "proposer" ? scope === "proposals" : true,
+      (ctx.query("mode") ?? "editor") === "proposer" ? scope === "proposals" : true,
   };
 
   const propose = (app: Hono, body: unknown, query = "?mode=proposer") =>

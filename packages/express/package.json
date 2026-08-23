@@ -1,0 +1,65 @@
+{
+  "name": "@yorm/express",
+  "version": "0.1.0",
+  "description": "Express transport adapter for YORM: a router for the HTTP document routes plus the y-protocols WebSocket collaboration endpoint, served by ws on the HTTP server's upgrade event.",
+  "keywords": [
+    "yorm",
+    "express",
+    "websocket",
+    "yjs",
+    "collaborative"
+  ],
+  "license": "MIT",
+  "author": "Medical Informatics Engineering, Inc.",
+  "homepage": "https://github.com/mieweb/yorm/tree/main/packages/express#readme",
+  "bugs": "https://github.com/mieweb/yorm/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mieweb/yorm.git",
+    "directory": "packages/express"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests --root ../.. packages/express"
+  },
+  "dependencies": {
+    "@yorm/core": "workspace:*",
+    "@yorm/server": "workspace:*",
+    "@yorm/yjs": "workspace:*",
+    "ws": "^8.18.0"
+  },
+  "peerDependencies": {
+    "express": "^5",
+    "yjs": "^13"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/ws": "^8.5.13",
+    "express": "^5.0.1",
+    "lib0": "^0.2.98",
+    "typescript": "^5.6.3",
+    "y-protocols": "^1.0.6",
+    "yjs": "^13.6.20"
+  }
+}

@@ -14,7 +14,7 @@ import type { DocumentSession, RolePolicy } from "@yorm/yjs";
 
 import { createHonoYorm } from "../src/index.js";
 import { fakeDocumentStore, fakeProjectionStore, until } from "./fakes.js";
-import { MiniClient } from "./miniClient.js";
+import { MiniClient } from "@yorm/server";
 
 interface Visit {
   demographics?: { name?: string; dob?: string };
@@ -127,9 +127,7 @@ describe("@yorm/hono WebSocket role policies", () => {
     const physician = connect();
     await until(() => receptionist.synced && physician.synced, "both synced");
 
-    const demographics = receptionist.doc
-      .getMap("resource")
-      .get("demographics") as Y.Map<unknown>;
+    const demographics = receptionist.doc.getMap("resource").get("demographics") as Y.Map<unknown>;
     demographics.set("name", "Ada King");
 
     await until(
@@ -139,8 +137,7 @@ describe("@yorm/hono WebSocket role policies", () => {
     // Hidden sections survive the write-back.
     expect((session.read() as Visit).orders).toEqual(initialVisit.orders);
     await until(
-      () =>
-        ((resource(physician) as Visit).demographics?.name ?? "") === "Ada King",
+      () => ((resource(physician) as Visit).demographics?.name ?? "") === "Ada King",
       "physician saw the receptionist's edit",
     );
     receptionist.close();
@@ -153,7 +150,7 @@ describe("@yorm/hono WebSocket role policies", () => {
 
     receptionist.doc.getMap("resource").set("orders", "sneaky");
     await until(() => receptionist.closed !== null, "socket closed");
-    expect(receptionist.closed).toEqual({ code: 1008 });
+    expect(receptionist.closed?.code).toBe(1008);
     expect((session.read() as Visit).orders).toEqual(initialVisit.orders);
   });
 
@@ -161,11 +158,7 @@ describe("@yorm/hono WebSocket role policies", () => {
     const nurse = connect("?role=nurse");
     await until(() => nurse.synced, "nurse synced");
     // Full visibility: the nurse lens has no `view`.
-    expect(Object.keys(resource(nurse)).sort()).toEqual([
-      "allergies",
-      "demographics",
-      "orders",
-    ]);
+    expect(Object.keys(resource(nurse)).sort()).toEqual(["allergies", "demographics", "orders"]);
 
     const orders = nurse.doc.getMap("resource").get("orders") as Y.Array<unknown>;
     (orders.get(0) as Y.Map<unknown>).set("status", "completed");
@@ -178,7 +171,7 @@ describe("@yorm/hono WebSocket role policies", () => {
     added.set("id", "o2");
     orders.push([added]);
     await until(() => nurse.closed !== null, "nurse socket closed");
-    expect(nurse.closed).toEqual({ code: 1008 });
+    expect(nurse.closed?.code).toBe(1008);
     expect((session.read() as Visit).orders).toHaveLength(1);
   });
 
@@ -192,8 +185,7 @@ describe("@yorm/hono WebSocket role policies", () => {
       demographics: { ...current.demographics, name: "Grace Hopper" },
     });
     await until(
-      () =>
-        ((resource(receptionist) as Visit).demographics?.name ?? "") === "Grace Hopper",
+      () => ((resource(receptionist) as Visit).demographics?.name ?? "") === "Grace Hopper",
       "lens picked up the canonical edit",
     );
     // Still redacted.

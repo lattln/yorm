@@ -1,0 +1,59 @@
+{
+  "name": "@yorm/server",
+  "version": "0.1.0",
+  "description": "Framework-neutral YORM server: the REST route table and the y-protocols WebSocket collaboration endpoint, plus the transport conformance suite adapters must pass.",
+  "keywords": [
+    "yorm",
+    "yjs",
+    "websocket",
+    "server",
+    "collaborative"
+  ],
+  "license": "MIT",
+  "author": "Medical Informatics Engineering, Inc.",
+  "homepage": "https://github.com/mieweb/yorm/tree/main/packages/server#readme",
+  "bugs": "https://github.com/mieweb/yorm/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mieweb/yorm.git",
+    "directory": "packages/server"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests --root ../.. packages/server"
+  },
+  "dependencies": {
+    "@yorm/core": "workspace:*",
+    "@yorm/yjs": "workspace:*",
+    "lib0": "^0.2.98",
+    "y-protocols": "^1.0.6"
+  },
+  "peerDependencies": {
+    "yjs": "^13"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "yjs": "^13.6.20"
+  }
+}

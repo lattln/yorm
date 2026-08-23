@@ -10,7 +10,7 @@ import { createYorm, memoryRuntime, proposalsApi } from "@yorm/yjs";
 import { createHonoYorm, guardCanonicalWrites } from "../src/index.js";
 import type { FakeDocumentStore, FakeProjectionStore } from "./fakes.js";
 import { fakeDocumentStore, fakeProjectionStore, until } from "./fakes.js";
-import { MiniClient } from "./miniClient.js";
+import { MiniClient } from "@yorm/server";
 
 const patientMapping = defineMapping<{ name?: string }>({
   name: "test.Patient",
@@ -53,10 +53,10 @@ describe("@yorm/hono WebSocket route", () => {
       "/yorm",
       createHonoYorm(yorm, {
         upgradeWebSocket,
-        onAuthorize: (ctx) => ctx.req.query("token") !== "bad",
+        onAuthorize: (ctx) => ctx.query("token") !== "bad",
         // Proposer-mode connections may only write the proposals subtree.
         onAuthorizeWrite: (ctx, _docRef, scope) =>
-          (ctx.req.query("mode") ?? "editor") === "proposer" ? scope === "proposals" : true,
+          (ctx.query("mode") ?? "editor") === "proposer" ? scope === "proposals" : true,
       }),
     );
     await new Promise<void>((resolve) => {
@@ -108,7 +108,7 @@ describe("@yorm/hono WebSocket route", () => {
   it("unauthorized sockets are closed with 1008", async () => {
     const denied = connect("/yorm/ws/Patient/p1?token=bad");
     await until(() => denied.closed !== null, "unauthorized socket closed");
-    expect(denied.closed).toEqual({ code: 1008 });
+    expect(denied.closed?.code).toBe(1008);
   });
 
   it("?policy=explicit defers projection until an HTTP flush", async () => {
@@ -149,7 +149,7 @@ describe("@yorm/hono WebSocket route", () => {
     // and the server-side document is unchanged.
     proposer.doc.getMap("resource").set("name", "Mallory");
     await until(() => proposer.closed !== null, "proposer socket closed");
-    expect(proposer.closed).toEqual({ code: 1008 });
+    expect(proposer.closed?.code).toBe(1008);
     const doc = await (await app.request("/yorm/docs/Patient/p3")).json();
     expect(doc.object).toEqual({});
   });

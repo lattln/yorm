@@ -5,5 +5,5 @@
     "outDir": "dist"
   },
   "include": ["src"],
-  "references": [{ "path": "../core" }, { "path": "../yjs" }]
+  "references": [{ "path": "../core" }, { "path": "../yjs" }, { "path": "../server" }]
 }

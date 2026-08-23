@@ -1,0 +1,66 @@
+{
+  "name": "@yorm/fastify",
+  "version": "0.1.0",
+  "description": "Fastify transport adapter for YORM: registers the HTTP document routes and the y-protocols WebSocket collaboration endpoint as a Fastify plugin.",
+  "keywords": [
+    "yorm",
+    "fastify",
+    "websocket",
+    "yjs",
+    "collaborative"
+  ],
+  "license": "MIT",
+  "author": "Medical Informatics Engineering, Inc.",
+  "homepage": "https://github.com/mieweb/yorm/tree/main/packages/fastify#readme",
+  "bugs": "https://github.com/mieweb/yorm/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mieweb/yorm.git",
+    "directory": "packages/fastify"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests --root ../.. packages/fastify"
+  },
+  "dependencies": {
+    "@yorm/core": "workspace:*",
+    "@yorm/server": "workspace:*",
+    "@yorm/yjs": "workspace:*"
+  },
+  "peerDependencies": {
+    "@fastify/websocket": "^11",
+    "fastify": "^5",
+    "yjs": "^13"
+  },
+  "devDependencies": {
+    "@fastify/websocket": "^11.0.2",
+    "@types/ws": "^8.5.13",
+    "fastify": "^5.2.0",
+    "lib0": "^0.2.98",
+    "typescript": "^5.6.3",
+    "ws": "^8.18.0",
+    "y-protocols": "^1.0.6",
+    "yjs": "^13.6.20"
+  }
+}

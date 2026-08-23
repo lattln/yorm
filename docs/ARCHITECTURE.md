@@ -17,7 +17,7 @@ graph TB
     NodeClient["Node client<br/>(seed / demo scripts)"]
   end
 
-  subgraph Transport["@yorm/hono — REST + WebSocket plugin"]
+  subgraph Transport["@yorm/server — REST + WebSocket protocol<br/>mounted by @yorm/hono, @yorm/fastify or @yorm/express"]
     HttpApi["HTTP API<br/>GET/PUT/PATCH /docs, projection-state,<br/>flush, proposals routes"]
     WsEndpoint["WS /ws/:type/:id<br/>y-protocols sync + awareness,<br/>role guard (proposer vs editor)"]
   end
@@ -74,18 +74,21 @@ contacts examples); the two runnable examples are
 
 ## Implemented packages
 
-All vitest counts from the current suite (165 tests total, plus 5 Playwright
+All vitest counts from the current suite (218 tests total, plus 5 Playwright
 e2e specs in the collab demo).
 
-| Package                                                                      | Public API (main entry points)                                                                                                                                                                                            | Tests |
-| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
-| [@yorm/core](../packages/core/README.md)                                     | `defineMapping`, `one`, `many`, `planProjection`, store contracts (`DocumentStore`, `ProjectionStore` incl. optional `listFailures`), `Origin` provenance                                                                 | 26    |
-| [@yorm/yjs](../packages/yjs/README.md)                                       | `createYorm`, `memoryRuntime`, `jsonCodec`, `applyJsonPatchLike`, `ProjectionScheduler`, `proposalsApi`, `proposalTrackingMapping`, `defineRolePolicy`, `createPolicyLens`, `replayProjections`, `retryFailedProjections` | 74    |
-| [@yorm/hono](../packages/hono/README.md)                                     | `createHonoYorm` (docs CRUD, projection-state, flush, proposals routes, `/ws` y-protocols endpoint, `onAuthorize`/`onAuthorizeWrite` hooks, `rolePolicies` lens rooms)                                                    | 28    |
-| [@yorm/drizzle](../packages/drizzle/README.md)                               | `createSqliteAdapter`, `drizzleDocumentStore`, `drizzleProjectionStore`, `adapterConformanceTests`, `resolveBackend` (`YORM_DB`)                                                                                          | 18    |
-| [@yorm/fhir](../packages/fhir/README.md)                                     | `fhirResource` codec, `fhirElementId`, `ensureElementIds`, extension helpers                                                                                                                                              | 27    |
-| [example-fhir-patient-contacts](../examples/fhir-patient-contacts/README.md) | POC server/seed/demo, `fhir.Patient@1` mapping, contacts import codec, round-trip + replay suites                                                                                                                         | 10    |
-| [patient-collab-demo](../examples/patient-collab-demo/README.md)             | Vite + React + Zustand + eSheet demo (roles, policies, proposals, live rows panel)                                                                                                                                        | 5 e2e |
+| Package                                                                      | Public API (main entry points)                                                                                                                                                                                            | Tests        |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| [@yorm/core](../packages/core/README.md)                                     | `defineMapping`, `one`, `many`, `planProjection`, store contracts (`DocumentStore`, `ProjectionStore` incl. optional `listFailures`), `Origin` provenance                                                                 | 26           |
+| [@yorm/yjs](../packages/yjs/README.md)                                       | `createYorm`, `memoryRuntime`, `jsonCodec`, `applyJsonPatchLike`, `ProjectionScheduler`, `proposalsApi`, `proposalTrackingMapping`, `defineRolePolicy`, `createPolicyLens`, `replayProjections`, `retryFailedProjections` | 74           |
+| [@yorm/server](../packages/server/README.md)                                 | `createYormServer` (framework-neutral routes + `/ws` endpoint: docs CRUD, projection-state, flush, proposals, `onAuthorize`/`onAuthorizeWrite` hooks, `rolePolicies` lens rooms), `transportConformanceTests`             | via adapters |
+| [@yorm/hono](../packages/hono/README.md)                                     | `createHonoYorm`, `createHonoYormWebSocket` (Hono adapter)                                                                                                                                                                | 39           |
+| [@yorm/fastify](../packages/fastify/README.md)                               | `yormFastify` (Fastify plugin adapter)                                                                                                                                                                                    | 11           |
+| [@yorm/express](../packages/express/README.md)                               | `createExpressYorm` (Express router + `attachWebSocket`)                                                                                                                                                                  | 11           |
+| [@yorm/drizzle](../packages/drizzle/README.md)                               | `createSqliteAdapter`, `drizzleDocumentStore`, `drizzleProjectionStore`, `adapterConformanceTests`, `resolveBackend` (`YORM_DB`)                                                                                          | 20           |
+| [@yorm/fhir](../packages/fhir/README.md)                                     | `fhirResource` codec, `fhirElementId`, `ensureElementIds`, extension helpers                                                                                                                                              | 27           |
+| [example-fhir-patient-contacts](../examples/fhir-patient-contacts/README.md) | POC server/seed/demo, `fhir.Patient@1` mapping, contacts import codec, round-trip + replay suites                                                                                                                         | 10           |
+| [patient-collab-demo](../examples/patient-collab-demo/README.md)             | Vite + React + Zustand + eSheet demo (roles, policies, proposals, live rows panel)                                                                                                                                        | 5 e2e        |
 
 ## README vision vs. current state
 

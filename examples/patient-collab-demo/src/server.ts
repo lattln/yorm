@@ -29,7 +29,7 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
-import type { Context } from "hono";
+import type { YormRequest } from "@yorm/hono";
 import {
   createPocServer,
   loadContactsFixture,
@@ -49,8 +49,8 @@ const port = Number(process.env.PORT ?? 5178);
  * `X-Demo-Mode` header or `mode` query param (a real deployment would derive
  * it from a verified identity).
  */
-function demoMode(c: Context): string {
-  return c.req.header("x-demo-mode") ?? c.req.query("mode") ?? "editor";
+function demoMode(request: YormRequest): string {
+  return request.header("x-demo-mode") ?? request.query("mode") ?? "editor";
 }
 
 /** Tables shown in the live rows panel, with deterministic ordering. */
@@ -121,7 +121,8 @@ const poc = createPocServer({
   honoOptions: {
     // Proposers may write the proposals subtree but never canonical state;
     // editors may write both.
-    onAuthorizeWrite: (c, _docRef, scope) => scope === "proposals" || demoMode(c) !== "proposer",
+    onAuthorizeWrite: (request, _docRef, scope) =>
+      scope === "proposals" || demoMode(request) !== "proposer",
     // Policy-lens roles (role-security POC): `?role=receptionist|nurse` on a
     // WebSocket upgrade syncs a derived, redacted Y.Doc instead of the
     // canonical one — see src/rolePolicies.ts. No `?role=` (or physician)

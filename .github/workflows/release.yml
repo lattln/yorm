@@ -1,0 +1,74 @@
+name: Release
+
+# Two-step release, both driven by merges to main:
+#   1. Changesets opens/updates a "Version Packages" PR. Merging it applies the
+#      version bumps and CHANGELOG entries.
+#   2. That merge lands with no changesets left, so this workflow publishes.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Build and verify, but publish nothing"
+        type: boolean
+        default: true
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Changesets opens the "Version Packages" PR
+      pull-requests: write
+      id-token: write # npm provenance
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      # Same vendor builds as ci.yml: the demo consumes @esheet/* and
+      # @mieweb/ui from submodules, and `pnpm run ci` builds/tests everything.
+      - run: pnpm --filter patient-collab-demo esheet:build
+      - run: pnpm --filter patient-collab-demo ui:build
+
+      # Opens or updates the "Version Packages" PR when changesets are pending;
+      # does nothing once they have been consumed.
+      - name: Version PR
+        if: github.event_name == 'push'
+        uses: changesets/action@v1
+        with:
+          version: pnpm changeset version
+          title: "chore(release): version packages"
+          commit: "chore(release): version packages"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Are there changesets left to consume?
+        id: pending
+        run: |
+          if compgen -G ".changeset/*.md" > /dev/null && \
+             [ "$(ls .changeset/*.md | grep -v README.md | wc -l)" -gt 0 ]; then
+            echo "pending=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "pending=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # scripts/release.sh is the whole release: guard, build, ci gate, publish.
+      - name: Publish
+        if: >-
+          github.event_name == 'workflow_dispatch' ||
+          steps.pending.outputs.pending == 'false'
+        run: ./scripts/release.sh ${{ (github.event_name == 'workflow_dispatch' && inputs.dry-run) && '--dry-run' || '' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"

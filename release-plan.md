@@ -87,8 +87,9 @@ For each of the five `packages/*/package.json`:
       exactly when `dist` and `src` are siblings in the tarball.
 - [x] Added `publint` + `@arethetypeswrong/cli` as root devDependencies and a
       `pnpm run check:packages` script that runs both over every package.
-- [~] Stale-`dist` guard — Decision #6 puts it in `scripts/release.sh`, so the
-  checkbox lands with R5.
+- [x] Stale-`dist` guard — Decision #6 puts it in `scripts/release.sh`, which
+      deletes every `packages/*/dist` and rebuilds before publishing (landed
+      with R5).
 - [x] Wired `check:packages` into the root `ci` script so regressions fail PRs
       (`.github/workflows/ci.yml` already runs `pnpm run ci`, so no workflow
       change was needed).
@@ -202,20 +203,36 @@ expected bumps and `CHANGELOG.md` files in a throwaway branch.
 
 ### R5 — Release automation
 
-- [ ] `scripts/release.sh`: `pnpm install --frozen-lockfile` → `pnpm run ci` →
+- [x] `scripts/release.sh`: `pnpm install --frozen-lockfile` → `pnpm run ci` →
       `pnpm run check:packages` → `pnpm -r publish --access public --no-git-checks`
       (pnpm publishes in topological order, so `@yorm/core` lands before its
       dependents automatically).
-- [ ] `.github/workflows/release.yml`: a thin wrapper calling that script, with
+- [x] `.github/workflows/release.yml`: a thin wrapper calling that script, with
       `permissions: { id-token: write, contents: write }` for provenance,
       `NODE_AUTH_TOKEN` from the secret, and the same submodule/vendor build
       steps `ci.yml` already performs.
-- [ ] Add the Changesets "Version Packages" PR step so releases are a merge, not
+- [x] Add the Changesets "Version Packages" PR step so releases are a merge, not
       a manual tag.
-- [ ] Dry-run the whole thing against `--dry-run` before the first real publish.
+- [x] Dry-run the whole thing against `--dry-run` before the first real publish.
 
 **Exit criteria:** a dry-run workflow run completes and lists the five intended
 tarballs.
+
+> **Done 2026-08-22.** `ALLOW_DIRTY=1 ./scripts/release.sh --dry-run` exits 0
+> and lists all **eight** tarballs in dependency order: core → drizzle, yjs →
+> fhir, server → express, fastify, hono. Notes on the implementation:
+>
+> - The script filters `./packages/*` explicitly rather than `pnpm -r`, so the
+>   two private `examples/*` packages can never be reached at all.
+> - It refuses to run from a dirty tree (`ALLOW_DIRTY=1` overrides) because
+>   `--no-git-checks` disables pnpm's own version of that check.
+> - `--dry-run` is a first-class flag, so `workflow_dispatch` can rehearse a
+>   release without publishing.
+> - The stale-`dist` guard is "delete and rebuild" rather than "detect": one
+>   pass over every package, and nothing stale can survive it. It only touches
+>   `packages/*/dist`, never the demo's `dist/`.
+> - [scripts/README.md](scripts/README.md) explains what belongs in the folder
+>   (repo conventions: every folder has an anchor).
 
 ### R6 — First release and docs
 

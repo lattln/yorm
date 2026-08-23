@@ -320,13 +320,26 @@ The core package does not require a web framework or Drizzle. Adapters are inten
 ### 1. Install
 
 ```bash
-pnpm add @yorm/core @yorm/yjs @yorm/hono @yorm/drizzle yjs hono drizzle-orm
+pnpm add @yorm/core @yorm/yjs @yorm/server @yorm/hono @yorm/drizzle
+pnpm add yjs hono drizzle-orm better-sqlite3
 ```
 
-Using Fastify or Express instead? Swap the adapter (`@yorm/fastify` + `fastify`,
-or `@yorm/express` + `express`) — everything else is identical.
+All `@yorm/*` packages are published together under one version (fixed
+versioning while pre-1.0), are **ESM-only**, and require **Node >= 20**.
 
-Add the database driver used by your application, such as `pg`, `postgres`, `better-sqlite3`, or the Cloudflare D1 adapter.
+Pick exactly one transport adapter; each brings its own peers:
+
+| Adapter         | Install                                             | Peer dependencies                                 |
+| --------------- | --------------------------------------------------- | ------------------------------------------------- |
+| `@yorm/hono`    | `pnpm add @yorm/hono hono`                          | `hono ^4`, `yjs ^13`                              |
+| `@yorm/fastify` | `pnpm add @yorm/fastify fastify @fastify/websocket` | `fastify ^5`, `@fastify/websocket ^11`, `yjs ^13` |
+| `@yorm/express` | `pnpm add @yorm/express express`                    | `express ^5`, `yjs ^13`                           |
+
+The remaining peers: `yjs ^13` everywhere, and `better-sqlite3 >=11` for
+`@yorm/drizzle`'s SQLite backend. Swap in the database driver your application
+uses — `pg`, `postgres`, `better-sqlite3`, or the Cloudflare D1 adapter.
+
+`@yorm/core` needs neither a web framework nor a database driver.
 
 ### 2. Define relational tables
 

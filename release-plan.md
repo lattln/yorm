@@ -236,17 +236,25 @@ tarballs.
 
 ### R6 — First release and docs
 
-- [ ] Decide the first published version (Decision #4).
+- [x] Decide the first published version (Decision #4: `0.1.0`).
 - [ ] Publish; verify `npm view @yorm/core` and the provenance badge on npmjs.
-- [ ] Add an **Install** section to [README.md](README.md) with real
+      **Human-only** (needs the `@yorm` org and `NPM_TOKEN`).
+- [x] Add an **Install** section to [README.md](README.md) with real
       `pnpm add` lines and the peer-dependency matrix (`yjs ^13`, `hono ^4`,
       `fastify ^5`, `express ^5`, `better-sqlite3 >=11`).
-- [ ] Update [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) to state that
+- [x] Update [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) to state that
       `packages/*` are published and how the release flow works.
 - [ ] Smoke-test: fresh directory, install from npm, run the quickstart.
+      **Blocked on the publish above** — R2 already smoke-tested the same
+      tarballs from disk in `/tmp/yorm-scratch`.
 
 **Exit criteria:** a clean machine can `pnpm add @yorm/core @yorm/yjs` and run
 the README quickstart without the monorepo checked out.
+
+> **Docs done 2026-08-22.** The install matrix was generated from the actual
+> `peerDependencies`/`engines` fields, not by hand. The two open boxes are the
+> publish itself and the post-publish smoke test, both deliberately left to a
+> human (see R0).
 
 ## Build order
 
@@ -286,10 +294,8 @@ extraction itself is independent of R0 and can start immediately.
    depend on `@yorm/server`, which depends on `core` + `yjs`) and all sit at
    `0.1.0`. One version number for the whole surface is far easier to document
    while pre-1.0, and Changesets can be switched to independent later.
-4. **First published version — OPEN (2026-08-22).** Options: publish `0.1.0` as
-   is, or bump to `0.2.0` to signal that the published artifact differs from the
-   long-lived in-repo `0.1.0`. **Recommendation: `0.1.0`** — nothing consumed it
-   yet, so there is no version to disambiguate from.
+4. **First published version — DECIDED (2026-08-22): `0.1.0`.** Nothing consumed
+   the in-repo `0.1.0` yet, so there is no version to disambiguate from.
 5. **Source maps — DECIDED (2026-08-22): ship `src`.** These are small pure-TS
    packages, so working step-through debugging for consumers is worth roughly
    doubling the tarball. `files: ["dist", "src"]`; `include: ["src"]` in each

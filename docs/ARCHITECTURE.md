@@ -90,6 +90,29 @@ e2e specs in the collab demo).
 | [example-fhir-patient-contacts](../examples/fhir-patient-contacts/README.md) | POC server/seed/demo, `fhir.Patient@1` mapping, contacts import codec, round-trip + replay suites                                                                                                                         | 10           |
 | [patient-collab-demo](../examples/patient-collab-demo/README.md)             | Vite + React + Zustand + eSheet demo (roles, policies, proposals, live rows panel)                                                                                                                                        | 5 e2e        |
 
+## Publishing
+
+The eight `packages/*` are published to npm under the `@yorm` scope; both
+`examples/*` packages stay `private`. Versioning is **fixed** while pre-1.0 —
+one changeset bumps the entire surface to the same version — so the peer matrix
+in the README's install section stays trivially correct.
+
+```mermaid
+flowchart LR
+  PR["PR with a changeset<br/>(.changeset/*.md)"] --> Main["merge to main"]
+  Main --> VersionPR["changesets/action opens<br/>&quot;Version Packages&quot; PR"]
+  VersionPR --> MergeVersion["merge it:<br/>bumps + CHANGELOGs"]
+  MergeVersion --> Release["release.yml → scripts/release.sh"]
+  Release --> Npm[("npm registry<br/>@yorm/* with provenance")]
+```
+
+`scripts/release.sh` is the only sanctioned publish path and runs locally too
+(`./scripts/release.sh --dry-run`): it refuses a dirty tree, deletes and
+rebuilds every `packages/*/dist` (the stale-`dist` guard), runs the full `ci`
+gate including `publint` and `attw`, then publishes `./packages/*` in
+topological order. See [scripts/README.md](../scripts/README.md) and
+[release-plan.md](../release-plan.md).
+
 ## README vision vs. current state
 
 The root README is intentionally the long-range design document. Honest map:

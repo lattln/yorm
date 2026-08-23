@@ -25,6 +25,10 @@ jobs:
       contents: write # Changesets opens the "Version Packages" PR
       pull-requests: write
       id-token: write # npm provenance
+    env:
+      # Job-level so the publish step's `if` can see it; the `secrets` context
+      # is not available in a step condition.
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -64,10 +68,13 @@ jobs:
           fi
 
       # scripts/release.sh is the whole release: guard, build, ci gate, publish.
+      # Without the secret the step is skipped rather than failing, so the
+      # workflow is harmless before `NPM_TOKEN` exists.
       - name: Publish
         if: >-
-          github.event_name == 'workflow_dispatch' ||
-          steps.pending.outputs.pending == 'false'
+          env.NPM_TOKEN != '' &&
+          (github.event_name == 'workflow_dispatch' ||
+          steps.pending.outputs.pending == 'false')
         run: ./scripts/release.sh ${{ (github.event_name == 'workflow_dispatch' && inputs.dry-run) && '--dry-run' || '' }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

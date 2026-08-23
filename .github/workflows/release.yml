@@ -71,6 +71,7 @@ jobs:
       # Without the secret the step is skipped rather than failing, so the
       # workflow is harmless before `NPM_TOKEN` exists.
       - name: Publish
+        id: publish
         if: >-
           env.NPM_TOKEN != '' &&
           (github.event_name == 'workflow_dispatch' ||
@@ -79,3 +80,20 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
+
+      # One tag per release: the packages are a fixed version group, so
+      # packages/core carries the version they all share. `gh release create`
+      # creates the tag; a re-run that publishes nothing finds it already there.
+      - name: Tag the release
+        if: >-
+          steps.publish.outcome == 'success' &&
+          !(github.event_name == 'workflow_dispatch' && inputs.dry-run)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="v$(node -p "require('./packages/core/package.json').version")"
+          if gh release view "$tag" > /dev/null 2>&1; then
+            echo "$tag is already released"
+          else
+            gh release create "$tag" --title "$tag" --generate-notes
+          fi

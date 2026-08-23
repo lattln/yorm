@@ -48,8 +48,9 @@
 - [x] Claim `@yorm` on npmjs.org as an org (Decision #1). **Human-only.**
       Claimed 2026-08-22.
 - [x] Decide the license (Decision #2: MIT); add a root [LICENSE](LICENSE) file.
-- [ ] Create a **granular access token** scoped to the org, store it as the
-      `NPM_TOKEN` repository secret. **Human-only.**
+- [x] Create a **granular access token** scoped to the org, store it as the
+      `NPM_TOKEN` repository secret. **Human-only.** Added 2026-08-22; the token
+      needs _bypass 2FA_ enabled or the publish fails with `EOTP`.
 - [x] Confirm `github.com/mieweb/yorm` is public (npm provenance requires a
       public repo and a public package).
 
@@ -238,16 +239,18 @@ tarballs.
 ### R6 — First release and docs
 
 - [x] Decide the first published version (Decision #4: `0.1.0`).
-- [ ] Publish; verify `npm view @yorm/core` and the provenance badge on npmjs.
-      **Human-only** (needs the `@yorm` org and `NPM_TOKEN`).
+- [x] Publish; verify `npm view @yorm/core` and the provenance badge on npmjs.
+      **Human-only** (needs the `@yorm` org and `NPM_TOKEN`). All eight packages
+      published at `0.1.0` on 2026-08-22 with SLSA provenance attestations.
 - [x] Add an **Install** section to [README.md](README.md) with real
       `pnpm add` lines and the peer-dependency matrix (`yjs ^13`, `hono ^4`,
       `fastify ^5`, `express ^5`, `better-sqlite3 >=11`).
 - [x] Update [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) to state that
       `packages/*` are published and how the release flow works.
-- [ ] Smoke-test: fresh directory, install from npm, run the quickstart.
-      **Blocked on the publish above** — R2 already smoke-tested the same
-      tarballs from disk in `/tmp/yorm-scratch`.
+- [x] Smoke-test: fresh directory, install from npm, run the quickstart.
+      Installed `@yorm/core @yorm/yjs @yorm/hono` from the registry into an empty
+      project: every ESM entry point imports and `npm audit signatures` reports
+      verified signatures and attestations.
 
 **Exit criteria:** a clean machine can `pnpm add @yorm/core @yorm/yjs` and run
 the README quickstart without the monorepo checked out.

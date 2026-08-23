@@ -45,7 +45,8 @@
 
 ### R0 — Identity, license, credentials (human-only; blocks everything)
 
-- [ ] Claim `@yorm` on npmjs.org as an org (Decision #1). **Human-only.**
+- [x] Claim `@yorm` on npmjs.org as an org (Decision #1). **Human-only.**
+      Claimed 2026-08-22.
 - [x] Decide the license (Decision #2: MIT); add a root [LICENSE](LICENSE) file.
 - [ ] Create a **granular access token** scoped to the org, store it as the
       `NPM_TOKEN` repository secret. **Human-only.**

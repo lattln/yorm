@@ -1244,6 +1244,22 @@ Run mapping golden tests:
 pnpm test:mappings
 ```
 
+### Changesets
+
+Every pull request that changes a published `packages/*` package must include a
+changeset:
+
+```bash
+pnpm changeset        # describe the change, pick major/minor/patch
+git add .changeset
+```
+
+The packages are **fixed-versioned** while pre-1.0: one changeset bumps the
+whole `@yorm/*` surface to the same version, which keeps the peer matrix in the
+install instructions trivially correct. `pnpm changeset version` (run by the
+release workflow, not by hand) applies the bumps and writes the `CHANGELOG.md`
+files. The two `examples/*` packages are `private` and ignored.
+
 ---
 
 ## Testing mappings

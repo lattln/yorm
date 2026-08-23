@@ -1,0 +1,23 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config@4.0.0/schema.json",
+  "baseBranch": "main",
+  "access": "public",
+  "format": "auto",
+  "changelog": "@changesets/cli/changelog",
+  "commit": false,
+  "ignore": ["example-fhir-patient-contacts", "patient-collab-demo"],
+  "fixed": [
+    [
+      "@yorm/core",
+      "@yorm/yjs",
+      "@yorm/server",
+      "@yorm/hono",
+      "@yorm/fastify",
+      "@yorm/express",
+      "@yorm/drizzle",
+      "@yorm/fhir"
+    ]
+  ],
+  "linked": [],
+  "updateInternalDependencies": "patch"
+}

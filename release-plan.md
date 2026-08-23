@@ -184,16 +184,21 @@ still pass.
 
 ### R4 — Versioning with Changesets
 
-- [ ] Add `@changesets/cli`; `pnpm changeset init`.
-- [ ] Configure `.changeset/config.json`: `"access": "public"`,
+- [x] Add `@changesets/cli`; `pnpm changeset init`.
+- [x] Configure `.changeset/config.json`: `"access": "public"`,
       `"baseBranch": "main"`, ignore both `examples/*` packages.
-- [ ] Choose fixed vs. independent versioning (Decision #3) and encode it in
+- [x] Choose fixed vs. independent versioning (Decision #3) and encode it in
       the `fixed`/`linked` arrays.
-- [ ] Document the "add a changeset with your PR" rule in the contributing
+- [x] Document the "add a changeset with your PR" rule in the contributing
       section of [README.md](README.md).
 
 **Exit criteria:** `pnpm changeset` → `pnpm changeset version` produces the
 expected bumps and `CHANGELOG.md` files in a throwaway branch.
+
+> **Done 2026-08-22.** Verified with a throwaway `minor` changeset on
+> `@yorm/core`: all eight packages moved to `0.2.0` together and each got a
+> `CHANGELOG.md`, confirming the `fixed` array. Reverted afterwards — the
+> packages stay at `0.1.0` for the first publish (Decision #4).
 
 ### R5 — Release automation
 
@@ -259,12 +264,11 @@ extraction itself is independent of R0 and can start immediately.
 2. **License — DECIDED (2026-08-22): MIT**, the mieweb open-source default.
    Root [LICENSE](LICENSE) is the single copy; `pnpm publish` copies it into
    every tarball, and each manifest declares `"license": "MIT"`.
-3. **Fixed vs. independent versioning — OPEN (2026-08-22).** The eight packages
-   are tightly coupled (after R3, all three transport adapters depend on
-   `@yorm/server`, which depends on `core` + `yjs`) and all sit at `0.1.0`.
-   **Recommendation: `fixed`** while pre-1.0 —
-   one version number for the whole surface is far easier to document, and
-   Changesets can be switched to independent later.
+3. **Fixed vs. independent versioning — DECIDED (2026-08-22): `fixed`.** The
+   eight packages are tightly coupled (after R3, all three transport adapters
+   depend on `@yorm/server`, which depends on `core` + `yjs`) and all sit at
+   `0.1.0`. One version number for the whole surface is far easier to document
+   while pre-1.0, and Changesets can be switched to independent later.
 4. **First published version — OPEN (2026-08-22).** Options: publish `0.1.0` as
    is, or bump to `0.2.0` to signal that the published artifact differs from the
    long-lived in-repo `0.1.0`. **Recommendation: `0.1.0`** — nothing consumed it

@@ -84,7 +84,18 @@ export function createMysqlAdapter(options: MysqlAdapterOptions): MysqlAdapter {
         database: options.database ?? "yorm",
         timezone: "Z",
       };
-  const pool = mysql.createPool({ ...connection, multipleStatements: false });
+  const pool = mysql.createPool({
+    ...connection,
+    multipleStatements: false,
+    // The server's wait_timeout kills idle connections; without these each
+    // stale one fails its next query with PROTOCOL_CONNECTION_LOST before
+    // the pool replaces it. Retire idles client-side first and keep the
+    // survivors alive.
+    idleTimeout: 60_000,
+    maxIdle: 2,
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 10_000,
+  });
   const db = drizzle(pool);
   return {
     db,

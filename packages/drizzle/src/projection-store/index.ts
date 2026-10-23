@@ -1,96 +1,48 @@
 /**
  * `ProjectionStore` on Drizzle (better-sqlite3 driver).
  *
- * Application projection tables are dynamic and user-owned, so plan
- * operations are executed as raw SQL built from **validated identifiers**
- * (`/^[A-Za-z_][A-Za-z0-9_]*$/` — anything else throws, guarding against SQL
- * injection) with placeholders for every value. Callers may optionally
- * register Drizzle table objects via `options.tables`; a registered table
- * contributes its real (trusted) table name, while columns are always
- * validated. All operations of a plan plus its checkpoint advance run in one
- * synchronous better-sqlite3 transaction.
+ * Identifier validation, scope conditions and checkpoint mapping live in
+ * `./shared.js`; this file holds only what is SQLite-specific — the
+ * `ON CONFLICT … DO UPDATE` upsert and the `NOT IN (VALUES …)` reconcile —
+ * plus the synchronous better-sqlite3 transaction that runs a whole plan and
+ * its checkpoint advance as one unit.
  */
 import type {
-  Origin,
   ProjectionCheckpoint,
   ProjectionPlan,
   ProjectionStateRecord,
   ProjectionStore,
   ReconcileOperation,
-  Scalar,
   UpsertOperation,
 } from "@yorm/core";
-import type { SQL, Table } from "drizzle-orm";
-import { and, eq, getTableName, sql } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
 import { yormProjectionState } from "../schema.js";
+import type { DrizzleProjectionStoreOptions, ProjectionStatement } from "./shared.js";
+import {
+  COMMA,
+  assertIdentifier,
+  bindable,
+  buildKeepRows,
+  buildScopeCondition,
+  cell,
+  tableResolver,
+  toStateRecord,
+} from "./shared.js";
 
-/** A projection table registered for trusted name resolution. */
-export interface ProjectionTableConfig {
-  /** The Drizzle table object backing this projection table. */
-  table: Table;
-}
-
-/** One statement as sent to the driver: parameterized SQL plus its bindings. */
-export interface ProjectionStatement {
-  sql: string;
-  params: unknown[];
-}
-
-/** Every statement one plan wrote, with the document change set that caused it. */
-export interface ProjectionCommit {
-  mapping: string;
-  documentId: string;
-  documentType: string;
-  documentVersion: number;
-  origin: Origin;
-  /** Plan operations in execution order, then the checkpoint advance. */
-  statements: ProjectionStatement[];
-}
-
-export interface DrizzleProjectionStoreOptions {
-  /** Optional registry of Drizzle table objects, keyed by plan table name. */
-  tables?: Record<string, ProjectionTableConfig>;
-  /** Called once per successfully applied plan with the SQL that plan produced. */
-  onCommit?: (commit: ProjectionCommit) => void;
-}
-
-const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
-
-/** Validates an identifier before it is embedded into SQL. */
-function assertIdentifier(name: string, what: string): string {
-  if (!IDENTIFIER.test(name)) {
-    throw new Error(
-      `drizzleProjectionStore: invalid ${what} "${name}"; identifiers must match ${IDENTIFIER}`,
-    );
-  }
-  return name;
-}
-
-/** Converts a plan scalar to a better-sqlite3-bindable value (booleans → 0/1). */
-function bindable(value: Scalar): string | number | null {
-  if (typeof value === "boolean") return value ? 1 : 0;
-  return value;
-}
-
-const COMMA = sql.raw(", ");
+export type {
+  DrizzleProjectionStoreOptions,
+  ProjectionCommit,
+  ProjectionStatement,
+  ProjectionTableConfig,
+} from "./shared.js";
 
 function buildUpsert(op: UpsertOperation, table: string): SQL {
   const keyColumns = Object.keys(op.key);
   const ownedColumns = op.ownedColumns.map((column) => assertIdentifier(column, "column"));
   for (const column of keyColumns) assertIdentifier(column, "column");
-
-  /** Reads a cell value, rejecting `undefined` (mappings must emit null). */
-  function cell(record: Record<string, Scalar>, column: string, what: string): Scalar {
-    const value = record[column];
-    if (value === undefined) {
-      throw new Error(
-        `drizzleProjectionStore: ${what} column "${column}" of table "${table}" has no value in the upsert operation`,
-      );
-    }
-    return value;
-  }
 
   const insertColumns = [...keyColumns, ...ownedColumns];
   const columnList = sql.join(
@@ -100,8 +52,8 @@ function buildUpsert(op: UpsertOperation, table: string): SQL {
   const valueList = sql.join(
     insertColumns.map((column) =>
       column in op.key
-        ? sql`${bindable(cell(op.key, column, "key"))}`
-        : sql`${bindable(cell(op.values, column, "owned"))}`,
+        ? sql`${bindable(cell(op.key, column, "key", table))}`
+        : sql`${bindable(cell(op.values, column, "owned", table))}`,
     ),
     COMMA,
   );
@@ -122,16 +74,6 @@ function buildUpsert(op: UpsertOperation, table: string): SQL {
   return sql`insert into ${sql.identifier(table)} (${columnList}) values (${valueList}) on conflict (${conflictTarget}) do update set ${setList}`;
 }
 
-function buildScopeCondition(scope: Record<string, Scalar>): SQL {
-  const conditions = Object.entries(scope).map(([column, value]) => {
-    assertIdentifier(column, "column");
-    return value === null
-      ? sql`${sql.identifier(column)} is null`
-      : sql`${sql.identifier(column)} = ${bindable(value)}`;
-  });
-  return sql.join(conditions, sql.raw(" and "));
-}
-
 function buildReconcile(op: ReconcileOperation, table: string): SQL {
   if (Object.keys(op.scope).length === 0) {
     throw new Error(
@@ -148,35 +90,8 @@ function buildReconcile(op: ReconcileOperation, table: string): SQL {
     keyColumns.map((column) => sql.identifier(column)),
     COMMA,
   );
-  const keepRows = sql.join(
-    op.keepKeys.map((key) => {
-      const cells = keyColumns.map((column) => {
-        const value = key[column];
-        if (value === undefined) {
-          throw new Error(
-            `drizzleProjectionStore: keepKey for table "${table}" is missing key column "${column}"`,
-          );
-        }
-        return sql`${bindable(value)}`;
-      });
-      return sql`(${sql.join(cells, COMMA)})`;
-    }),
-    COMMA,
-  );
+  const keepRows = buildKeepRows(op.keepKeys, keyColumns, table);
   return sql`delete from ${sql.identifier(table)} where ${scopeCondition} and (${keyTuple}) not in (values ${keepRows})`;
-}
-
-/** Maps a `yorm_projection_state` row to the core record shape. */
-function toStateRecord(row: typeof yormProjectionState.$inferSelect): ProjectionStateRecord {
-  return {
-    documentId: row.documentId,
-    mappingName: row.mappingName,
-    mappingVersion: row.mappingVersion,
-    sourceDocumentVersion: row.sourceDocumentVersion,
-    status: row.status,
-    projectedAt: row.projectedAt,
-    error: row.error,
-  };
 }
 
 /**
@@ -192,15 +107,9 @@ export function drizzleProjectionStore<TSchema extends Record<string, unknown>>(
   options?: DrizzleProjectionStoreOptions,
 ): ProjectionStore {
   const registry = options?.tables ?? {};
+  const resolveTable = tableResolver(registry);
   const onCommit = options?.onCommit;
   const dialect = new SQLiteSyncDialect();
-
-  /** Resolves a plan table name: registered Drizzle tables are trusted, everything else is validated. */
-  function resolveTable(name: string): string {
-    const registered = registry[name];
-    if (registered) return getTableName(registered.table);
-    return assertIdentifier(name, "table name");
-  }
 
   return {
     async applyPlan(plan: ProjectionPlan): Promise<void> {

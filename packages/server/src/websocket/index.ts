@@ -118,7 +118,11 @@ export function guardCanonicalWrites(
     Y.applyUpdate(scratch, Y.encodeStateAsUpdate(doc));
     const before = JSON.stringify(scratch.getMap(rootKey).toJSON());
     Y.applyUpdate(scratch, update);
-    return JSON.stringify(scratch.getMap(rootKey).toJSON()) !== before;
+    return (
+      scratch.store.pendingStructs !== null ||
+      scratch.store.pendingDs !== null ||
+      JSON.stringify(scratch.getMap(rootKey).toJSON()) !== before
+    );
   } finally {
     scratch.destroy();
   }
@@ -314,92 +318,106 @@ export function createWebSocketEndpoint(
           }
         },
         onMessage(socket, data) {
-          const decoder = decoding.createDecoder(data);
-          switch (decoding.readVarUint(decoder)) {
-            case MESSAGE_SYNC: {
-              if (!writable) {
-                const payload = updatePayloadOf(data);
-                if (payload !== null) {
-                  if (updateChangesDocument(room.source.doc, payload)) {
-                    socket.close(1008, "read-only connection: document writes are forbidden");
-                  }
-                  // A normal sync includes a no-op SyncStep2, even for readers.
-                  return;
-                }
-              }
-              if (room.lens) {
-                const payload = updatePayloadOf(data);
-                if (payload !== null) {
-                  // Doc-mutating message: route it through the lens (policy
-                  // validation + canonical write-back). Fan-out is
-                  // synchronous, so mark this socket as the origin.
-                  room.currentOrigin = socket;
-                  try {
-                    const result = room.lens.applyClientUpdate(payload);
-                    if (!result.allowed) {
-                      socket.close(1008, result.reason);
+          try {
+            const decoder = decoding.createDecoder(data);
+            switch (decoding.readVarUint(decoder)) {
+              case MESSAGE_SYNC: {
+                if (!writable) {
+                  const payload = updatePayloadOf(data);
+                  if (payload !== null) {
+                    if (updateChangesDocument(room.source.doc, payload)) {
+                      socket.close(1008, "read-only connection: document writes are forbidden");
                     }
-                  } finally {
-                    room.currentOrigin = null;
+                    // A normal sync includes a no-op SyncStep2, even for readers.
+                    return;
                   }
-                  return;
                 }
-                // SyncStep1 never mutates the doc — fall through and reply
-                // with the lens doc's state.
-              }
-              if (guardCanonical) {
-                const payload = updatePayloadOf(data);
-                if (payload !== null && guardCanonicalWrites(room.session.doc, payload)) {
-                  // Refuse the update entirely (never applied server-side).
-                  socket.close(1008, "proposer role: canonical writes are forbidden");
-                  return;
-                }
-              }
-              if (options.onValidateSyncUpdate) {
-                const payload = updatePayloadOf(data);
-                if (payload !== null) {
-                  const scratch = new Y.Doc();
-                  try {
-                    Y.applyUpdate(scratch, Y.encodeStateAsUpdate(room.session.doc));
-                    Y.applyUpdate(scratch, payload);
-                    if (
-                      !options.onValidateSyncUpdate(
-                        request,
-                        { type, id },
-                        room.session.doc,
-                        scratch,
-                      )
-                    ) {
-                      socket.close(1008, "document update refused");
-                      return;
+                if (room.lens) {
+                  const payload = updatePayloadOf(data);
+                  if (payload !== null) {
+                    // Doc-mutating message: route it through the lens (policy
+                    // validation + canonical write-back). Fan-out is
+                    // synchronous, so mark this socket as the origin.
+                    room.currentOrigin = socket;
+                    try {
+                      const result = room.lens.applyClientUpdate(payload);
+                      if (!result.allowed) {
+                        socket.close(1008, result.reason);
+                      }
+                    } finally {
+                      room.currentOrigin = null;
                     }
-                  } finally {
-                    scratch.destroy();
+                    return;
+                  }
+                  // SyncStep1 never mutates the doc — fall through and reply
+                  // with the lens doc's state.
+                }
+                if (guardCanonical) {
+                  const payload = updatePayloadOf(data);
+                  if (payload !== null && guardCanonicalWrites(room.session.doc, payload)) {
+                    // Refuse the update entirely (never applied server-side).
+                    socket.close(1008, "proposer role: canonical writes are forbidden");
+                    return;
                   }
                 }
+                if (options.onValidateSyncUpdate) {
+                  const payload = updatePayloadOf(data);
+                  if (payload !== null) {
+                    const scratch = new Y.Doc();
+                    try {
+                      for (const [name, root] of room.session.doc.share) {
+                        if (root instanceof Y.Map) scratch.getMap(name);
+                        else if (root instanceof Y.Array) scratch.getArray(name);
+                        else if (root instanceof Y.Text) scratch.getText(name);
+                        else if (root instanceof Y.XmlText) scratch.get(name, Y.XmlText);
+                        else if (root instanceof Y.XmlElement) scratch.get(name, Y.XmlElement);
+                        else if (root instanceof Y.XmlFragment) scratch.getXmlFragment(name);
+                      }
+                      Y.applyUpdate(scratch, Y.encodeStateAsUpdate(room.session.doc));
+                      Y.applyUpdate(scratch, payload);
+                      if (
+                        scratch.store.pendingStructs !== null ||
+                        scratch.store.pendingDs !== null ||
+                        !options.onValidateSyncUpdate(
+                          request,
+                          { type, id },
+                          room.session.doc,
+                          scratch,
+                        )
+                      ) {
+                        socket.close(1008, "document update refused");
+                        return;
+                      }
+                    } finally {
+                      scratch.destroy();
+                    }
+                  }
+                }
+                const encoder = encoding.createEncoder();
+                encoding.writeVarUint(encoder, MESSAGE_SYNC);
+                // Applying the message mutates the doc; fan-out is synchronous,
+                // so mark this socket as the origin for the duration.
+                room.currentOrigin = socket;
+                try {
+                  syncProtocol.readSyncMessage(decoder, encoder, room.source.doc, socket);
+                } finally {
+                  room.currentOrigin = null;
+                }
+                if (encoding.length(encoder) > 1) {
+                  socket.send(toFrame(encoder));
+                }
+                break;
               }
-              const encoder = encoding.createEncoder();
-              encoding.writeVarUint(encoder, MESSAGE_SYNC);
-              // Applying the message mutates the doc; fan-out is synchronous,
-              // so mark this socket as the origin for the duration.
-              room.currentOrigin = socket;
-              try {
-                syncProtocol.readSyncMessage(decoder, encoder, room.source.doc, socket);
-              } finally {
-                room.currentOrigin = null;
-              }
-              if (encoding.length(encoder) > 1) {
-                socket.send(toFrame(encoder));
-              }
-              break;
+              case MESSAGE_AWARENESS:
+                awarenessProtocol.applyAwarenessUpdate(
+                  room.awareness,
+                  decoding.readVarUint8Array(decoder),
+                  socket,
+                );
+                break;
             }
-            case MESSAGE_AWARENESS:
-              awarenessProtocol.applyAwarenessUpdate(
-                room.awareness,
-                decoding.readVarUint8Array(decoder),
-                socket,
-              );
-              break;
+          } catch {
+            socket.close(1008, "invalid document message or validation failure");
           }
         },
         onClose(socket) {

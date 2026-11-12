@@ -4,6 +4,8 @@ import type { ServerType } from "@hono/node-server";
 import { createNodeWebSocket } from "@hono/node-ws";
 import { Hono } from "hono";
 import * as Y from "yjs";
+import * as encoding from "lib0/encoding";
+import * as syncProtocol from "y-protocols/sync";
 import { defineMapping, one } from "@yorm/core";
 import { createYorm, memoryRuntime, proposalsApi } from "@yorm/yjs";
 
@@ -59,9 +61,21 @@ describe("@yorm/hono WebSocket route", () => {
         onAuthorizeWrite: (ctx, _docRef, scope) =>
           ctx.query("reader") !== "yes" &&
           ((ctx.query("mode") ?? "editor") === "proposer" ? scope === "proposals" : true),
-        onValidateSyncUpdate: (ctx, _ref, before, after) =>
-          ctx.query("guard") !== "yes" ||
-          before.getMap("resource").get("locked") === after.getMap("resource").get("locked"),
+        onValidateSyncUpdate: (ctx, _ref, before, after) => {
+          if (ctx.query("guard") === "throws") {
+            throw new Error("validator failed");
+          }
+          if (ctx.query("guard") === "json") {
+            return (
+              before.toJSON().resource?.locked === after.toJSON().resource?.locked &&
+              after.toJSON().resource?.name !== undefined
+            );
+          }
+          return (
+            ctx.query("guard") !== "yes" ||
+            before.getMap("resource").get("locked") === after.getMap("resource").get("locked")
+          );
+        },
       }),
     );
     app.route(
@@ -157,6 +171,61 @@ describe("@yorm/hono WebSocket route", () => {
     expect(client.closed).toEqual({ code: 1008, reason: "document update refused" });
     const response = await app.request("/yorm/docs/Patient/offline-guard");
     expect(response.status).toBe(404);
+  });
+
+  it.each(["reader=yes", "guard=yes", "mode=proposer"])(
+    "rejects malformed sync uploads without throwing (%s)",
+    async (query) => {
+      const client = connect(`/yorm/ws/Patient/malformed-${query}?${query}`);
+      await until(() => client.synced, "client synced");
+      client.ws.send(new Uint8Array([0, 2, 0]));
+      await until(() => client.closed !== null, "malformed upload refused");
+      expect(client.closed?.code).toBe(1008);
+      expect((await app.request(`/yorm/docs/Patient/malformed-${query}`)).status).toBe(404);
+    },
+  );
+
+  it("rejects a throwing validator without persisting the upload", async () => {
+    const client = connect("/yorm/ws/Patient/throwing?guard=throws");
+    await until(() => client.closed !== null, "throwing validator refused");
+    expect(client.closed?.code).toBe(1008);
+    expect((await app.request("/yorm/docs/Patient/throwing")).status).toBe(404);
+  });
+
+  it("preserves initialized root types for whole-document validators", async () => {
+    const writer = connect("/yorm/ws/Patient/json-validator");
+    await until(() => writer.synced, "writer synced");
+    writer.doc.getMap("resource").set("name", "Before");
+    await until(() => documents.snapshots.has("Patient/json-validator"), "seed persisted");
+    const client = connect("/yorm/ws/Patient/json-validator?guard=json");
+    await until(() => client.synced, "validated client synced");
+    client.doc.getMap("resource").set("name", "After");
+    await until(() => writer.root().name === "After", "whole-document validation accepted");
+    client.doc.getMap("resource").set("locked", "Forbidden");
+    await until(() => client.closed !== null, "whole-document validation refused");
+    expect(writer.root()).toEqual({ name: "After" });
+  });
+
+  it.each(["structs", "deletes"])("rejects unresolved %s before validation", async (kind) => {
+    const id = `pending-${kind}`;
+    const client = connect(`/yorm/ws/Patient/${id}?guard=yes`);
+    await until(() => client.synced, "client synced");
+    const offline = new Y.Doc();
+    try {
+      offline.getMap("resource").set("locked", "Forbidden");
+      const vector = Y.encodeStateVector(offline);
+      if (kind === "structs") offline.getMap("resource").set("name", "Later");
+      else offline.getMap("resource").delete("locked");
+      const encoder = encoding.createEncoder();
+      encoding.writeVarUint(encoder, 0);
+      syncProtocol.writeUpdate(encoder, Y.encodeStateAsUpdate(offline, vector));
+      client.ws.send(encoding.toUint8Array(encoder));
+      await until(() => client.closed !== null, "unresolved upload refused");
+      expect(client.closed?.code).toBe(1008);
+      expect(documents.snapshots.has(`Patient/${id}`)).toBe(false);
+    } finally {
+      offline.destroy();
+    }
   });
 
   it("unauthorized sockets are closed with 1008", async () => {

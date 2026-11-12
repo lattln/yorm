@@ -141,6 +141,9 @@ For raw (non-lens) sockets, optional synchronous
 document update. `before` is the live document (do not mutate it); `after` is a
 disposable scratch document containing the proposed state. Returning false
 refuses the entire payload with close code 1008, without persistence or fan-out.
+Scratch roots retain the live document's initialized types for `toJSON()` checks.
+Malformed messages, throwing validators, and updates with unresolved CRDT
+dependencies are also refused with code 1008 rather than retained for later replay.
 The hook covers both Update and SyncStep2/offline uploads, but not awareness or
 SyncStep1. Lens writes continue through their role policy; HTTP writes still
 require appropriate codec/route authorization. The scratch replay adds

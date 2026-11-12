@@ -53,13 +53,22 @@ describe("@yorm/hono WebSocket route", () => {
       "/yorm",
       createHonoYorm(yorm, {
         upgradeWebSocket,
+        allowReadOnlySockets: true,
         onAuthorize: (ctx) => ctx.query("token") !== "bad",
         // Proposer-mode connections may only write the proposals subtree.
         onAuthorizeWrite: (ctx, _docRef, scope) =>
-          (ctx.query("mode") ?? "editor") === "proposer" ? scope === "proposals" : true,
+          ctx.query("reader") !== "yes" &&
+          ((ctx.query("mode") ?? "editor") === "proposer" ? scope === "proposals" : true),
         onValidateSyncUpdate: (ctx, _ref, before, after) =>
           ctx.query("guard") !== "yes" ||
           before.getMap("resource").get("locked") === after.getMap("resource").get("locked"),
+      }),
+    );
+    app.route(
+      "/write-required",
+      createHonoYorm(yorm, {
+        upgradeWebSocket,
+        onAuthorizeWrite: () => false,
       }),
     );
     await new Promise<void>((resolve) => {
@@ -113,7 +122,10 @@ describe("@yorm/hono WebSocket route", () => {
     const observer = connect("/yorm/ws/Patient/guarded?guard=yes");
     await until(() => client.synced && observer.synced, "guarded clients synced");
     client.doc.getMap("resource").set("name", "Allowed");
-    await until(() => observer.doc.getMap("resource").get("name") === "Allowed", "ordinary edit accepted");
+    await until(
+      () => observer.doc.getMap("resource").get("name") === "Allowed",
+      "ordinary edit accepted",
+    );
     client.doc.transact(() => {
       client.doc.getMap("resource").set("name", "Rejected");
       client.doc.getMap("resource").set("locked", "Changed");
@@ -128,13 +140,19 @@ describe("@yorm/hono WebSocket route", () => {
   it("also validates offline state uploaded through SyncStep2", async () => {
     const client = connect("/yorm/ws/Patient/offline-guard?guard=yes");
     // Before open, seed an offline document without sending an Update frame.
-    Y.applyUpdate(client.doc, (() => {
-      const offline = new Y.Doc();
-      try {
-        offline.getMap("resource").set("locked", "Offline change");
-        return Y.encodeStateAsUpdate(offline);
-      } finally { offline.destroy(); }
-    })(), client);
+    Y.applyUpdate(
+      client.doc,
+      (() => {
+        const offline = new Y.Doc();
+        try {
+          offline.getMap("resource").set("locked", "Offline change");
+          return Y.encodeStateAsUpdate(offline);
+        } finally {
+          offline.destroy();
+        }
+      })(),
+      client,
+    );
     await until(() => client.closed !== null, "offline upload refused");
     expect(client.closed).toEqual({ code: 1008, reason: "document update refused" });
     const response = await app.request("/yorm/docs/Patient/offline-guard");
@@ -145,6 +163,102 @@ describe("@yorm/hono WebSocket route", () => {
     const denied = connect("/yorm/ws/Patient/p1?token=bad");
     await until(() => denied.closed !== null, "unauthorized socket closed");
     expect(denied.closed?.code).toBe(1008);
+  });
+
+  it("still requires write access unless read-only fallback is enabled", async () => {
+    const denied = connect("/write-required/ws/Patient/p1");
+    await until(() => denied.closed !== null, "write-required socket closed");
+    expect(denied.closed).toEqual({ code: 1008, reason: "forbidden" });
+  });
+
+  it("read-only sockets sync existing state and live updates without persisting the handshake", async () => {
+    const writer = connect("/yorm/ws/Patient/readable");
+    await until(() => writer.synced, "writer synced");
+    writer.doc.getMap("resource").set("name", "Closed case");
+    writer.doc.getMap("resource").set("obsolete", "Removed before viewing");
+    writer.doc.getMap("resource").delete("obsolete");
+    await until(
+      () => (documents.snapshots.get("Patient/readable")?.documentVersion ?? 0) >= 3,
+      "initial state and deletion persisted",
+    );
+    const version = documents.snapshots.get("Patient/readable")!.documentVersion;
+    const reader = connect("/yorm/ws/Patient/readable?reader=yes&policy=explicit");
+    await until(() => reader.synced, "reader synced");
+    expect(reader.root()).toEqual({ name: "Closed case" });
+    expect(reader.closed).toBeNull();
+    expect(documents.snapshots.get("Patient/readable")!.documentVersion).toBe(version);
+    writer.doc.getMap("resource").set("name", "Live update");
+    await until(() => reader.root().name === "Live update", "reader received live update");
+    await until(
+      () =>
+        projections.plans.some(
+          (plan) =>
+            plan.documentId === "readable" &&
+            plan.operations.some((op) => op.kind === "upsert" && op.values.name === "Live update"),
+        ),
+      "reader did not change projection policy",
+    );
+    const denied = await app.request("/yorm/docs/Patient/readable?reader=yes", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Forbidden" }),
+    });
+    expect(denied.status).toBe(403);
+  });
+
+  it.each(["resource", "yorm:proposals", "unknown"])(
+    "read-only sockets refuse writes to %s before persistence or fan-out",
+    async (root) => {
+      const writer = connect(`/yorm/ws/Patient/read-only-${root}`);
+      await until(() => writer.synced, "writer synced");
+      writer.doc.getMap("resource").set("name", "Unchanged");
+      await until(
+        () => documents.snapshots.has(`Patient/read-only-${root}`),
+        "initial state persisted",
+      );
+      const snapshot = documents.snapshots.get(`Patient/read-only-${root}`)!;
+      const reader = connect(`/yorm/ws/Patient/read-only-${root}?reader=yes`);
+      await until(() => reader.synced, "reader synced");
+      reader.doc.getMap(root).set("name", "Rejected");
+      await until(() => reader.closed !== null, "read-only write refused");
+      expect(reader.closed).toEqual({
+        code: 1008,
+        reason: "read-only connection: document writes are forbidden",
+      });
+      expect(writer.doc.getMap(root).get("name")).toBe(
+        root === "resource" ? "Unchanged" : undefined,
+      );
+      expect(documents.snapshots.get(`Patient/read-only-${root}`)).toBe(snapshot);
+    },
+  );
+
+  it("refuses offline state uploaded through read-only SyncStep2", async () => {
+    const reader = connect("/yorm/ws/Patient/read-only-offline?reader=yes");
+    const offline = new Y.Doc();
+    try {
+      offline.getMap("resource").set("name", "Offline change");
+      Y.applyUpdate(reader.doc, Y.encodeStateAsUpdate(offline), reader);
+    } finally {
+      offline.destroy();
+    }
+    await until(() => reader.closed !== null, "read-only offline upload refused");
+    expect(reader.closed?.code).toBe(1008);
+    expect(documents.snapshots.has("Patient/read-only-offline")).toBe(false);
+  });
+
+  it("refuses CRDT writes even when the visible JSON is unchanged", async () => {
+    const writer = connect("/yorm/ws/Patient/read-only-same-json");
+    await until(() => writer.synced, "writer synced");
+    writer.doc.getMap("resource").set("name", "Same");
+    await until(
+      () => documents.snapshots.has("Patient/read-only-same-json"),
+      "initial state persisted",
+    );
+    const reader = connect("/yorm/ws/Patient/read-only-same-json?reader=yes");
+    await until(() => reader.synced, "reader synced");
+    reader.doc.getMap("resource").set("name", "Same");
+    await until(() => reader.closed !== null, "same-JSON write refused");
+    expect(reader.closed?.code).toBe(1008);
   });
 
   it("?policy=explicit defers projection until an HTTP flush", async () => {

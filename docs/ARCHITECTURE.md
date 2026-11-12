@@ -72,6 +72,11 @@ contacts examples); the two runnable examples are
 [examples/patient-collab-demo](../examples/patient-collab-demo/README.md)
 (two-browser collaborative editor with live SQL rows and suggestion mode).
 
+The shared WebSocket transport supports opt-in read-only connections when
+read authorization succeeds but write authorization does not. See the
+[server write-mode contract](../packages/server/README.md#write-modes--the-canonical-write-guard-planmd-m7)
+for sync and mutation enforcement.
+
 ## Implemented packages
 
 All vitest counts from the current suite (218 tests total, plus 5 Playwright

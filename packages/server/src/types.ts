@@ -88,6 +88,12 @@ export interface YormWebSocketEndpoint {
 
 export interface YormServerOptions {
   /**
+   * Let read-authorized sockets sync when write authorization is denied.
+   * Such sockets cannot change document state or projection policy.
+   * Defaults to false, preserving write-required upgrades.
+   */
+  allowReadOnlySockets?: boolean;
+  /**
    * Synchronous pre-apply guard for raw canonical WebSocket updates, including
    * initial SyncStep2 uploads. `after` is a disposable scratch document; never
    * mutate `before`. False refuses the entire update and closes with 1008.
@@ -112,7 +118,8 @@ export interface YormServerOptions {
    * is chosen by the `?mode=proposer` query param: proposer connections need
    * `"proposals"` write access and have direct canonical edits refused (see
    * `guardCanonicalWrites`); all other connections need `"canonical"`.
-   * Absent hook means allow. Returning `false` yields 403 / close 1008.
+   * Absent hook means allow. Returning `false` yields 403 / close 1008,
+   * or a read-only socket when `allowReadOnlySockets` is enabled.
    */
   onAuthorizeWrite?: (
     request: YormRequest,

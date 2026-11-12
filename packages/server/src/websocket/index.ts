@@ -138,6 +138,19 @@ function updatePayloadOf(data: Uint8Array): Uint8Array | null {
   return null;
 }
 
+function updateChangesDocument(doc: Y.Doc, update: Uint8Array): boolean {
+  const scratch = new Y.Doc();
+  try {
+    Y.applyUpdate(scratch, Y.encodeStateAsUpdate(doc));
+    const before = Y.encodeStateAsUpdate(scratch);
+    Y.applyUpdate(scratch, update);
+    const after = Y.encodeStateAsUpdate(scratch);
+    return before.length !== after.length || before.some((byte, index) => byte !== after[index]);
+  } finally {
+    scratch.destroy();
+  }
+}
+
 function createRoom(
   source: SyncSource,
   session: DocumentSession,
@@ -272,14 +285,15 @@ export function createWebSocketEndpoint(
       // HOW they write. A role with a policy syncs through its lens (the
       // policy governs reads and writes); `?mode=proposer` connections may
       // only write the proposals subtree; everything else is a canonical
-      // writer (v1: no read-only sockets).
+      // writer, unless the host opts into read-only fallback.
       const hasLens = policyFor(options.rolePolicies, type, role) !== null;
       const scope: WriteScope =
         !hasLens && request.query("mode") === "proposer" ? "proposals" : "canonical";
-      if (
-        !(await authorize(request, options, type, id)) ||
-        !(await authorizeWrite(request, options, type, id, scope))
-      ) {
+      if (!(await authorize(request, options, type, id))) {
+        return refuse("forbidden");
+      }
+      const writable = await authorizeWrite(request, options, type, id, scope);
+      if (!writable && !options.allowReadOnlySockets) {
         return refuse("forbidden");
       }
       const guardCanonical = scope === "proposals";
@@ -290,7 +304,7 @@ export function createWebSocketEndpoint(
         onOpen(socket) {
           room.sockets.add(socket);
           room.controlledIds.set(socket, new Set());
-          if (policy !== null) {
+          if (writable && policy !== null) {
             room.session.setPolicy(policy);
           }
           socket.send(encodeSyncStep1(room.source.doc));
@@ -303,6 +317,16 @@ export function createWebSocketEndpoint(
           const decoder = decoding.createDecoder(data);
           switch (decoding.readVarUint(decoder)) {
             case MESSAGE_SYNC: {
+              if (!writable) {
+                const payload = updatePayloadOf(data);
+                if (payload !== null) {
+                  if (updateChangesDocument(room.source.doc, payload)) {
+                    socket.close(1008, "read-only connection: document writes are forbidden");
+                  }
+                  // A normal sync includes a no-op SyncStep2, even for readers.
+                  return;
+                }
+              }
               if (room.lens) {
                 const payload = updatePayloadOf(data);
                 if (payload !== null) {
@@ -338,7 +362,14 @@ export function createWebSocketEndpoint(
                   try {
                     Y.applyUpdate(scratch, Y.encodeStateAsUpdate(room.session.doc));
                     Y.applyUpdate(scratch, payload);
-                    if (!options.onValidateSyncUpdate(request, { type, id }, room.session.doc, scratch)) {
+                    if (
+                      !options.onValidateSyncUpdate(
+                        request,
+                        { type, id },
+                        room.session.doc,
+                        scratch,
+                      )
+                    ) {
                       socket.close(1008, "document update refused");
                       return;
                     }

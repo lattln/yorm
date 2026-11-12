@@ -151,7 +151,16 @@ per-update work only when the hook is configured.
 A WebSocket connection's write scope is chosen at upgrade time: `?mode=proposer`
 connections are authorized via `onAuthorizeWrite(request, docRef, "proposals")`,
 all others via `onAuthorizeWrite(request, docRef, "canonical")` (refusal closes
-with `1008`; v1 has no read-only sockets).
+with `1008` by default).
+
+With `allowReadOnlySockets: true`, a read-authorized connection whose write
+hook returns false instead syncs read-only. It receives the existing document
+and subsequent updates, and can exchange awareness and non-mutating sync
+messages. Any document-changing Update or SyncStep2 upload closes it with
+`1008` before applying, persisting, or broadcasting the update. This includes
+changes outside the canonical subtree and CRDT changes with unchanged JSON.
+Read-only connections cannot change the room's projection policy. HTTP write
+authorization and the default write-required upgrade behavior are unchanged.
 
 On **proposer** connections, incoming sync updates that would modify the
 canonical root map are refused. Full CRDT-level per-subtree write refusal is
@@ -223,6 +232,7 @@ for lens roles via `onAuthorize`/`onAuthorizeWrite`.
 
 ```ts
 interface YormServerOptions {
+  allowReadOnlySockets?: boolean; // opt-in read-only fallback on denied writes
   onAuthorize?: (request: YormRequest, docRef: DocRef) => boolean | Promise<boolean>;
   onAuthorizeWrite?: (
     request: YormRequest,

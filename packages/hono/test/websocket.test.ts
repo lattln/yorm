@@ -49,6 +49,13 @@ describe("@yorm/hono WebSocket route", () => {
       projections,
       mappings: [patientMapping],
     });
+    const rootSession = await yorm.open("Patient", "root-types");
+    rootSession.doc.getMap("map");
+    rootSession.doc.getArray("array");
+    rootSession.doc.getText("text");
+    rootSession.doc.get("xml-text", Y.XmlText);
+    rootSession.doc.get("xml-element", Y.XmlElement);
+    rootSession.doc.getXmlFragment("xml-fragment");
     app = new Hono();
     const { upgradeWebSocket, injectWebSocket } = createNodeWebSocket({ app });
     app.route(
@@ -64,6 +71,11 @@ describe("@yorm/hono WebSocket route", () => {
         onValidateSyncUpdate: (ctx, _ref, before, after) => {
           if (ctx.query("guard") === "throws") {
             throw new Error("validator failed");
+          }
+          if (ctx.query("guard") === "types") {
+            return [...before.share].every(
+              ([name, root]) => root.constructor === after.share.get(name)?.constructor,
+            );
           }
           if (ctx.query("guard") === "json") {
             return (
@@ -204,6 +216,14 @@ describe("@yorm/hono WebSocket route", () => {
     client.doc.getMap("resource").set("locked", "Forbidden");
     await until(() => client.closed !== null, "whole-document validation refused");
     expect(writer.root()).toEqual({ name: "After" });
+  });
+
+  it("preserves all built-in root constructors, including XML text", async () => {
+    const client = connect("/yorm/ws/Patient/root-types?guard=types");
+    await until(() => client.synced, "typed roots synced");
+    client.doc.getMap("resource").set("name", "Typed roots");
+    await until(() => documents.snapshots.has("Patient/root-types"), "typed roots accepted");
+    expect(client.closed).toBeNull();
   });
 
   it.each(["structs", "deletes"])("rejects unresolved %s before validation", async (kind) => {

@@ -368,8 +368,8 @@ export function createWebSocketEndpoint(
                       for (const [name, root] of room.session.doc.share) {
                         if (root instanceof Y.Map) scratch.getMap(name);
                         else if (root instanceof Y.Array) scratch.getArray(name);
-                        else if (root instanceof Y.Text) scratch.getText(name);
                         else if (root instanceof Y.XmlText) scratch.get(name, Y.XmlText);
+                        else if (root instanceof Y.Text) scratch.getText(name);
                         else if (root instanceof Y.XmlElement) scratch.get(name, Y.XmlElement);
                         else if (root instanceof Y.XmlFragment) scratch.getXmlFragment(name);
                       }
